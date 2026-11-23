@@ -125,10 +125,13 @@ func home():
 	hud.show_page("home")
 
 func armory():
+	place(Vector3(35,0.03,0),0)
 	hud.show_page("armory")
 	pulse.show()
-	pulse.position = Vector3(0.43,-0.015,-0.72)
-	pulse.rotation_degrees = Vector3(8,65,-5)
+	pulse.get_node("Gloves").hide()
+	pulse.scale = Vector3.ONE * 1.70
+	pulse.position = Vector3(0.36,-0.055,-0.97)
+	pulse.rotation_degrees = Vector3(5,119,-3)
 
 func start_run():
 	mode = "play"
@@ -143,6 +146,8 @@ func start_run():
 	step_phase = 0
 	aimed = false
 	pulse.show()
+	pulse.get_node("Gloves").show()
+	pulse.scale = Vector3.ONE * 0.84
 	pose()
 	hud.show_page("play")
 	hud.update_play()
@@ -259,8 +264,8 @@ func fire():
 
 func pose():
 	var dip := sin(PI*recharge/RECHARGE_TIME)
-	pulse.position = Vector3(0.23,-0.16-dip*0.14+sin(step_phase)*0.004,-0.46+kick*0.035)
-	pulse.rotation_degrees = Vector3(kick*4-dip*18,6,0)
+	pulse.position = Vector3(0.225,-0.14-dip*0.14+sin(step_phase)*0.004,-0.52+kick*0.035)
+	pulse.rotation_degrees = Vector3(kick*4-dip*18,12,-3)
 
 func _physics_process(dt):
 	if mode!="play": return

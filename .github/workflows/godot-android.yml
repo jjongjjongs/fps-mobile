@@ -1,6 +1,9 @@
 name: Godot Android APK
 on:
   workflow_dispatch:
+  push:
+    branches: [godot/depot-mobile]
+    paths: [release-version.txt]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -9,14 +12,25 @@ permissions:
 
 jobs:
   android:
-    if: github.event_name == 'workflow_dispatch' || (github.head_ref == 'godot/depot-mobile' && github.event.pull_request.head.repo.full_name == github.repository)
+    if: github.event_name != 'pull_request' || (github.head_ref == 'godot/depot-mobile' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    outputs:
+      game_version: ${{ steps.revision.outputs.version }}
+      game_commit: ${{ steps.revision.outputs.commit }}
+      signed: ${{ steps.signing.outputs.signed }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.pull_request.head.sha || 'refs/heads/godot/depot-mobile' }}
+          ref: ${{ github.event.pull_request.head.sha || (github.event_name == 'push' && github.sha) || 'refs/heads/godot/depot-mobile' }}
           persist-credentials: false
+      - name: Record actual game revision
+        id: revision
+        run: |
+          version=$(cat release-version.txt)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Export Android release and sign installable preview
         run: bash ci/android.sh
       - name: Upload phone preview
@@ -37,7 +51,7 @@ jobs:
           if-no-files-found: error
       - name: Sign production APK on manual builds
         id: signing
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         env:
           ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
         run: |
@@ -54,3 +68,85 @@ jobs:
             build/release/*.apk
             build/release/SHA256SUMS.txt
           if-no-files-found: error
+
+  install-test:
+    if: github.event_name != 'pull_request'
+    needs: android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Download the file intended for Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ needs.android.outputs.signed }}
+        run: |
+          variant=preview
+          if [[ "$SIGNED" == true ]]; then variant=release; fi
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "VectorRange-$variant-arm64" --dir apk
+          cd apk
+          sha256sum -c SHA256SUMS.txt
+          mv *.apk install.apk
+          bin=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
+          "$bin/apksigner" verify install.apk
+          "$bin/aapt" dump badging install.apk > manifest
+          sed -n "s/^package: name='\([^']*\)'.*/\1/p" manifest > package-name
+          grep -Eq '^com\.jjongjjongs\.vectorrange(\.preview\.v[0-9_]+)?$' package-name
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch the signed APK on Android 15
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install apk/install.apk
+            adb shell am start -W "$(adb shell cmd package resolve-activity --brief "$(cat apk/package-name)" | tail -1 | tr -d '\r')"
+            sleep 5
+            adb shell pidof "$(cat apk/package-name)"
+
+  publish:
+    needs: [android, install-test]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: publish-vector-range
+      cancel-in-progress: false
+    steps:
+      - name: Publish the installable APK as a release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.android.outputs.game_version }}
+          REVISION: ${{ needs.android.outputs.game_commit }}
+          SIGNED: ${{ needs.android.outputs.signed }}
+        run: |
+          set -euo pipefail
+          variant=preview
+          flags=(--prerelease)
+          if [[ "$SIGNED" == true ]]; then variant=release; flags=(); fi
+          tag="v$VERSION"
+          if [[ "$variant" == preview ]]; then tag="$tag-preview"; fi
+          filename="VectorRange-$VERSION-$variant-arm64.apk"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$filename"; then
+            echo "The installable APK is already published for $tag."
+            exit 0
+          fi
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "VectorRange-$variant-arm64" --dir apk
+          (cd apk && sha256sum -c SHA256SUMS.txt)
+          mv apk/*.apk "$filename"
+          printf '%s\n' "안드로이드 ARM64 설치판입니다. 아래 Assets에서 **$filename**을 눌러 설치하세요." > notes.md
+          printf '\n![실제 플레이 화면](https://raw.githubusercontent.com/%s/%s/docs/images/depot.jpg)\n' "$GITHUB_REPOSITORY" "$REVISION" >> notes.md
+          gh release create "$tag" "$filename" --repo "$GITHUB_REPOSITORY" --target "$REVISION" --title "Vector Range $VERSION · Android $variant" --notes-file notes.md "${flags[@]}"
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].url' >> "$GITHUB_STEP_SUMMARY"

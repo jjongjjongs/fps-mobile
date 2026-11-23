@@ -21,7 +21,7 @@ PY
 unset ANDROID_SIGNING
 tool=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
 mkdir -p build/release
-out=build/release/VectorRange-0.1.0-arm64.apk
+out="build/release/VectorRange-$(cat release-version.txt)-arm64.apk"
 alias_name=$(cat "$keydir/alias")
 "$tool" sign --ks "$keydir/key" --ks-key-alias "$alias_name" --ks-pass "file:$keydir/store" \
   --key-pass "file:$keydir/pass" --out "$out" build/unsigned/VectorRange-unsigned.apk

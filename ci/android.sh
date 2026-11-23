@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+game_version=$(cat release-version.txt)
+[[ "$game_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+preview_package="com.jjongjjongs.vectorrange.preview.v${game_version//./_}"
+
 # The release template is shared by the installable preview and the production build.
 version=4.7.2
 tag="$version-stable"
@@ -52,7 +56,7 @@ verify_package() {
   "$tools_dir/zipalign" -c -P 16 4 "$apk"
   "$tools_dir/aapt" dump badging "$apk" > "$work/manifest"
   grep -Fq "package: name='$package'" "$work/manifest"
-  grep -Fq "versionName='0.1.0'" "$work/manifest"
+  grep -Fq "versionName='$game_version'" "$work/manifest"
   grep -Eq "^native-code: 'arm64-v8a' *$" "$work/manifest"
   if grep -q '^application-debuggable' "$work/manifest"; then exit 1; fi
 }
@@ -60,7 +64,7 @@ verify_package() {
 export_apk production
 cp "$work/production.apk" build/unsigned/VectorRange-unsigned.apk
 verify_package build/unsigned/VectorRange-unsigned.apk com.jjongjjongs.vectorrange
-sed -i 's/^package\/unique_name="com.jjongjjongs.vectorrange"$/package\/unique_name="com.jjongjjongs.vectorrange.preview"/;s/^package\/name="Vector Range"$/package\/name="Vector Range Preview"/' export_presets.cfg
+sed -i "s/^package\/unique_name=.*/package\/unique_name=\"$preview_package\"/;s/^package\/name=.*/package\/name=\"Vector Range $game_version Preview\"/" export_presets.cfg
 export_apk preview
 
 # Never use this single-run test identity for the production package.
@@ -70,7 +74,7 @@ keytool -genkeypair -noprompt -keystore "$work/preview.p12" -storetype PKCS12 \
 "$tools_dir/apksigner" sign --ks "$work/preview.p12" --ks-pass pass:android \
   --ks-key-alias preview --out build/preview/VectorRange-preview.apk "$work/preview.apk"
 "$tools_dir/apksigner" verify --verbose build/preview/VectorRange-preview.apk
-verify_package build/preview/VectorRange-preview.apk com.jjongjjongs.vectorrange.preview
+verify_package build/preview/VectorRange-preview.apk "$preview_package"
 for dir in build/preview build/unsigned; do
   (cd "$dir" && sha256sum *.apk > SHA256SUMS.txt)
 done
