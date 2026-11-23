@@ -79,6 +79,8 @@ func run():
 	var settings := ConfigFile.new()
 	check(settings.load("user://records.cfg")==OK,"persist settings")
 	check(settings.get_value("settings","sound")==not previous and settings.get_value("records","score")>=400,"record and preference saved")
+	game.speaker.stop()
+	await create_timer(0.15).timeout
 	game.queue_free()
 	await process_frame
 	if errors.is_empty(): print("PASS: Depot round, contacts, touch, recharge, pause, retry, menus and save.")
