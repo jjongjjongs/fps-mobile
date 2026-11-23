@@ -1,0 +1,29 @@
+name: Prepare Android offline signing tools
+on:
+  push:
+    branches: [release/offline-0.2.0]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Collect Android SDK signing tools and upgrade fixture
+        run: |
+          set -eu
+          bin=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
+          mkdir materials
+          cp "$bin/lib/apksigner.jar" materials/
+          cat > AndroidManifest.xml <<'XML'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.jjongjjongs.vectorrange" android:versionCode="1999">
+              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+              <application android:hasCode="false" android:label="Vector Range"/>
+          </manifest>
+          XML
+          platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+          "$bin/aapt" package -f -M AndroidManifest.xml -I "$platform" -F raw.apk
+          "$bin/zipalign" -f 4 raw.apk materials/fixture.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: offline-tools
+          path: materials/
