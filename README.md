@@ -1,35 +1,27 @@
-# Vector Range · Godot
+# Vector Range
 
-휴대폰에서 GitHub Actions로 빌드하는 가로 화면 1인칭 게임입니다. **PLAY → START RUN**을 누르면 창고 사격장에서 30초 타임어택이 시작됩니다. 왼쪽 스틱으로 이동하고 오른쪽 빈 공간을 밀어 시점을 돌립니다. PULSE를 누르면 표적 명중 시 100점이 올라갑니다. 5회 발사하면 자동 충전됩니다. 무기고, 일시정지, 재도전, 감도·소리 설정과 로컬 기록을 포함합니다.
+안드로이드 ARM64용 1인칭 펄스 태그 게임입니다. [GitHub Releases](https://github.com/jjongjjongs/fps-mobile/releases/latest)에서 **Assets → VectorRange-버전-release-arm64.apk**를 눌러 설치하세요.
 
-## 휴대폰 설치
+## 게임 모드
 
-[GitHub Releases](https://github.com/jjongjjongs/fps-mobile/releases)에서 원하는 버전을 열고 **Assets → VectorRange-버전-preview-arm64.apk**를 누릅니다. 0.1.1 Preview는 이전 테스트판과 나란히 설치됩니다. 로컬 점수는 버전별 테스트 앱에 따로 저장됩니다.
+- **PLAY → POLAR AI DUEL → START DUEL**로 북극 연구기지에 들어갑니다. 90초 안에 먼저 5점을 내면 승리합니다. 시간이 끝나면 점수가 높은 쪽이 이기며 동점이면 무승부입니다. 드론이 발광하면 펄스가 날아옵니다.
+- **PLAY → START RUN**으로 창고 사격장에서 30초 동안 표적 기록에 도전합니다.
 
-![실제 빌드의 창고 사격장](docs/images/depot.jpg)
-![펄스 무기고](docs/images/pulse.jpg)
+왼쪽 스틱으로 이동하고 오른쪽 빈 공간을 밀어 시점을 돌립니다. **PULSE**로 발사하고, **AIM**으로 확대 조준, **JUMP**로 점프, **LOW**로 앉기와 일어서기를 전환합니다. 다섯 번 발사하면 자동 충전됩니다.
 
-## 빌드
+![북극 연구기지 실제 플레이 화면](docs/images/polar.jpg)
 
-**Actions → Godot Android APK → Run workflow**로 제작 브랜치를 빌드합니다. release-version.txt가 바뀐 제작 브랜치 푸시도 게시를 시작합니다. Android 15 설치 및 실행 확인을 통과한 서명된 APK가 Releases에 올라갑니다. 같은 버전의 공개 APK는 다시 실행해도 교체하지 않습니다.
+## 업데이트
 
-## 사용자 키로 배포판 서명
+0.2.0부터 패키지 이름은 `com.jjongjjongs.vectorrange`이며 같은 배포 키를 사용합니다. 기존 0.1.x Preview와는 별도로 설치되며 저장 기록도 분리됩니다. 같은 키로 서명한 다음 정식판은 기존 정식판 위에 설치할 수 있습니다.
 
-테스트판은 Secret 없이 빌드됩니다. 배포 패키지 이름은 com.jjongjjongs.vectorrange입니다. **VectorRange-unsigned-arm64**에는 보관 중인 키로 직접 서명할 수 있는 릴리스 APK가 들어 있습니다. 이 파일은 서명한 뒤 설치합니다. 테스트판은 버전별 별도 패키지를 사용합니다.
+## 빌드 및 검증
 
-GitHub가 배포판도 서명하게 하려면 저장소의 Actions secrets에 **ANDROID_SIGNING** 한 개를 등록합니다. 값은 아래 형식의 JSON입니다. 기존 키스토어의 Base64 문자열, 별칭과 암호를 넣습니다. 키 암호가 저장소 암호와 같으면 key_password는 생략할 수 있습니다.
-
-```json
-{"keystore_base64":"<키스토어 파일의 Base64>","alias":"<키 별칭>","store_password":"<키스토어 암호>","key_password":"<키 암호>"}
-```
-
-다시 **Run workflow**를 누르면 **VectorRange-release-arm64**도 생성됩니다. 서명 단계는 APK 인증서의 SHA-256이 등록한 키와 일치하는지 검사합니다. 키 파일과 암호는 저장소 파일이나 이슈에 올리지 마세요.
-
-## 개발
-
-Godot 4.7.2에서 project.godot을 엽니다. PC에서는 WASD, 마우스 드래그, 스페이스와 Esc로 테스트합니다. CI는 Godot의 공식 ARM64 지원 Android 릴리스 템플릿을 사용합니다.
+제작 브랜치는 `godot/depot-mobile`입니다. Godot 4.7.2에서 프로젝트를 열거나 다음 명령으로 게임 동작을 검증합니다.
 
 ```sh
 godot --headless --editor --import
-godot --headless --script tests/smoke.gd
+godot --headless --fixed-fps 60 --script tests/smoke.gd
 ```
+
+버전을 올려 푸시하면 GitHub Actions가 맵과 입력 테스트를 거쳐 APK를 생성합니다. 배포용 비밀 값 `ANDROID_SIGNING`은 키스토어 Base64와 별칭, 비밀번호가 든 JSON입니다. 서명 인증서 지문을 확인한 뒤 Android 15에서 낮은 버전의 시험 패키지 위에 APK를 업데이트하고 앱을 실행합니다. 통과한 APK를 GitHub Releases에 게시합니다.

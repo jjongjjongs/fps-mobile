@@ -111,6 +111,14 @@ func build():
 	box(Vector3(0,2.15,-21.65),Vector3(7.8,4.3,0.25),DARK)
 	for h in range(11):
 		box(Vector3(0,0.3+h*0.32,-21.49),Vector3(7.3,0.045,0.06),STEEL)
+	bake_geometry()
+	sign_text("D E P O T      /      0 1",Vector3(0,4.75,-21.4),0.011)
+	sign_text("B   0 2",Vector3(-6.8,2.9,-21.65),0.014)
+	sign_text("B   0 3",Vector3(6.8,2.9,-21.65),0.014)
+	for pos in [Vector3(0,1.5,-3.5),Vector3(-4.0,2.1,-8),Vector3(4.7,2.5,-10),Vector3(-2.4,1.7,-13.8),Vector3(2.2,3.1,-17)]:
+		target(pos)
+
+func bake_geometry():
 	for m in groups:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -126,11 +134,6 @@ func build():
 			model.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(model)
 	groups.clear()
-	sign_text("D E P O T      /      0 1",Vector3(0,4.75,-21.4),0.011)
-	sign_text("B   0 2",Vector3(-6.8,2.9,-21.65),0.014)
-	sign_text("B   0 3",Vector3(6.8,2.9,-21.65),0.014)
-	for pos in [Vector3(0,1.5,-3.5),Vector3(-4.0,2.1,-8),Vector3(4.7,2.5,-10),Vector3(-2.4,1.7,-13.8),Vector3(2.2,3.1,-17)]:
-		target(pos)
 
 func beam(a: Vector3, b: Vector3, width: float, depth: float, color: Color):
 	var axis := b-a

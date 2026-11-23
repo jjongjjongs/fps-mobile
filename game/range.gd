@@ -2,6 +2,17 @@ extends Node3D
 
 const Depot = preload("res://game/depot.gd")
 const Hud = preload("res://game/hud.gd")
+const Polar = preload("res://game/polar.gd")
+const Duel = preload("res://game/duel.gd")
+var polar: Polar
+var rival: Duel
+var versus := false
+var crouched := false
+var zoom := false
+var jump_requested := false
+var body := CollisionShape3D.new()
+var capsule := CapsuleShape3D.new()
+var standing_probe := CapsuleShape3D.new()
 const DURATION := 30.0
 const CAPACITY := 5
 const RECHARGE_TIME := 1.05
@@ -39,8 +50,8 @@ func _ready():
 	add_child(depot)
 	depot.build()
 	add_child(player)
-	var body := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
+	standing_probe.radius=0.295
+	standing_probe.height=1.70
 	capsule.radius = 0.30
 	capsule.height = 1.72
 	body.shape = capsule
@@ -110,7 +121,30 @@ func clear_plate():
 	lit = -1
 	hit_flash = 0
 
+func reset_stance():
+	crouched=false
+	zoom=false
+	jump_requested=false
+	capsule.height=1.72
+	body.position.y=0.86
+	eye.position.y=1.5
+	eye.fov=63
+
+func set_crouch():
+	if not crouched:
+		crouched=true
+	else:
+		var probe:=PhysicsShapeQueryParameters3D.new()
+		probe.shape=standing_probe
+		probe.transform=Transform3D(Basis.IDENTITY,player.global_position+Vector3.UP*0.87)
+		probe.exclude=[player.get_rid()]
+		if not get_world_3d().direct_space_state.intersect_shape(probe,1).is_empty(): return
+		crouched=false
+	capsule.height=1.04 if crouched else 1.72
+	body.position.y=capsule.height/2
+
 func place(at: Vector3, yaw: float):
+	reset_stance()
 	player.position = at
 	player.rotation = Vector3(0,yaw,0)
 	eye.rotation = Vector3.ZERO
@@ -118,6 +152,8 @@ func place(at: Vector3, yaw: float):
 	clear_input()
 
 func home():
+	versus=false
+	if polar: polar.hide()
 	mode = "home"
 	clear_plate()
 	place(Vector3(-5.7,0.03,9.5),deg_to_rad(-20))
@@ -133,11 +169,32 @@ func armory():
 	pulse.position = Vector3(0.36,-0.055,-0.97)
 	pulse.rotation_degrees = Vector3(5,119,-3)
 
+func start_duel():
+	if not polar:
+		polar=Polar.new()
+		add_child(polar)
+		polar.position=Vector3(220,0,0)
+		polar.build()
+		rival=Duel.new()
+		polar.add_child(rival)
+		rival.build()
+	polar.show()
+	rival.reset()
+	start_round(true)
+
 func start_run():
+	start_round(false)
+
+func retry():
+	if versus: start_duel()
+	else: start_run()
+
+func start_round(is_duel: bool):
+	versus=is_duel
 	mode = "play"
 	clear_plate()
-	place(POS,0)
-	remaining = DURATION
+	place(polar.to_global(Polar.YARD_SPAWN) if versus else POS,0)
+	remaining = 90.0 if versus else DURATION
 	charges = CAPACITY
 	shots = 0
 	hits = 0
@@ -155,6 +212,7 @@ func start_run():
 func pause_run():
 	if mode!="play": return
 	mode = "pause"
+	jump_requested=false
 	clear_input()
 	hud.show_page("pause")
 
@@ -190,6 +248,7 @@ func accuracy() -> int:
 
 func look(delta: Vector2):
 	var scale := deg_to_rad(62+sensitivity*24)/maxf(1,get_viewport().get_visible_rect().size.y)
+	if zoom: scale *= 0.55
 	player.rotate_y(-delta.x*scale)
 	eye.rotation.x = clampf(eye.rotation.x-delta.y*scale, deg_to_rad(-65),deg_to_rad(68))
 
@@ -203,7 +262,12 @@ func _input(event):
 			back()
 			get_viewport().set_input_as_handled()
 			return
-		if mode=="play" and event.keycode==KEY_SPACE: fire()
+		if mode=="play":
+			match event.keycode:
+				KEY_SPACE, KEY_F: fire()
+				KEY_C: set_crouch()
+				KEY_J: jump_requested=true
+				KEY_Q: zoom=not zoom
 	if mode!="play": return
 	if event is InputEventScreenTouch:
 		var id: int = event.index
@@ -215,6 +279,8 @@ func _input(event):
 			if fire_id==id: fire_id = -1
 		elif hud.overlay.pause_rect().has_point(event.position):
 			pause_run()
+		elif press_action(event.position):
+			pass
 		elif event.position.distance_to(hud.overlay.fire_center())<=57 and fire_id<0:
 			fire_id = id
 			fire()
@@ -232,16 +298,26 @@ func _input(event):
 		mouse_look = false
 		if event.pressed:
 			if hud.overlay.pause_rect().has_point(event.position): pause_run()
+			elif press_action(event.position): pass
 			elif event.position.distance_to(hud.overlay.fire_center())<=57: fire()
 			else: mouse_look=true
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and mouse_look: look(event.relative)
+
+func press_action(pos: Vector2) -> bool:
+	match hud.overlay.action_at(pos):
+		"AIM": zoom=not zoom
+		"LOW": set_crouch()
+		"JUMP": jump_requested=true
+		_: return false
+	return true
 
 func aim_index() -> int:
 	var from := eye.global_position
 	var query := PhysicsRayQueryParameters3D.create(from,from-eye.global_basis.z*55)
 	query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if versus: return 0 if hit.get("collider")==rival.bot and rival.grace<=0 else -1
 	return hit.collider.get_meta("plate",-1) if hit else -1
 
 func fire():
@@ -254,40 +330,53 @@ func fire():
 	if plate>=0:
 		hits += 1
 		clear_plate()
-		lit = plate
-		depot.light_plate(lit,true)
+		if versus:
+			rival.tagged()
+		else:
+			lit = plate
+			depot.light_plate(lit,true)
 		hit_flash = 0.36
 	if sound:
 		speaker.stream = tones[int(plate>=0)]
 		speaker.play()
 	hud.update_play()
+	if versus and hits>=Duel.LIMIT: finish_round()
 
 func pose():
 	var dip := sin(PI*recharge/RECHARGE_TIME)
 	pulse.position = Vector3(0.225,-0.14-dip*0.14+sin(step_phase)*0.004,-0.52+kick*0.035)
-	pulse.rotation_degrees = Vector3(kick*4-dip*18,12,-3)
+	var blend:=clampf((63.0-eye.fov)/22.0,0,1)
+	pulse.position=pulse.position.lerp(Vector3(0,-0.098-dip*0.12,-0.53+kick*0.018),blend)
+	pulse.rotation_degrees = Vector3(kick*4-dip*18,lerpf(12,0,blend),lerpf(-3,0,blend))
 
 func _physics_process(dt):
 	if mode!="play": return
 	remaining = maxf(0,remaining-dt)
 	if remaining<=0.00001:
 		remaining=0
-		mode="result"
-		clear_input()
-		best=maxi(best,hits*100)
-		best_accuracy=maxi(best_accuracy,accuracy())
-		save_prefs()
-		hud.show_page("result")
+		finish_round()
 		return
 	var move := stick
 	move.x += int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
 	move.y += int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W))
 	move = move.limit_length(1)
-	var planar := player.basis*Vector3(move.x,0,move.y)*3.8
+	var speed:=2.15 if crouched else 3.8
+	var planar := player.basis*Vector3(move.x,0,move.y)*speed
 	player.velocity.x = planar.x
 	player.velocity.z = planar.z
 	player.velocity.y = -1.0 if player.is_on_floor() else maxf(-18,player.velocity.y-14*dt)
+	if jump_requested and player.is_on_floor():
+		if crouched: set_crouch()
+		if not crouched: player.velocity.y=5.4
+	jump_requested=false
 	player.move_and_slide()
+	eye.position.y=move_toward(eye.position.y,0.89 if crouched else 1.50,4.8*dt)
+	eye.fov=move_toward(eye.fov,41.0 if zoom else 63.0,140.0*dt)
+	if versus:
+		rival.advance(dt,player,eye)
+		if rival.bot_score>=Duel.LIMIT:
+			finish_round()
+			return
 	if recharge>0:
 		recharge = maxf(0,recharge-dt)
 		if recharge==0: charges=CAPACITY
@@ -299,3 +388,16 @@ func _physics_process(dt):
 	aimed = aim_index()>=0
 	pose()
 	hud.update_play()
+
+func finish_round():
+	mode="result"
+	clear_input()
+	if not versus:
+		best=maxi(best,hits*100)
+		best_accuracy=maxi(best_accuracy,accuracy())
+		save_prefs()
+	hud.show_page("result")
+
+func outcome() -> String:
+	if hits==rival.bot_score: return "DRAW"
+	return "YOU WIN" if hits>rival.bot_score else "DRONE WINS"

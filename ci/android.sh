@@ -3,9 +3,12 @@ set -euo pipefail
 
 game_version=$(cat release-version.txt)
 [[ "$game_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-preview_package="com.jjongjjongs.vectorrange.preview.v${game_version//./_}"
+IFS=. read -r major minor patch <<<"$game_version"
+(( minor < 1000 && patch < 1000 ))
+code=$((major*1000000+minor*1000+patch))
+(( code > 1 && code <= 2100000000 ))
 
-# The release template is shared by the installable preview and the production build.
+# Use the upstream release template for the production build.
 version=4.7.2
 tag="$version-stable"
 editor="Godot_v${tag}_linux.x86_64"
@@ -29,7 +32,7 @@ done
 godot="$work/$editor"
 chmod +x "$godot"
 install_dir="$HOME/.local/share/godot/export_templates/$version.stable"
-mkdir -p "$install_dir" "$HOME/.config/godot" build/preview build/unsigned
+mkdir -p "$install_dir" "$HOME/.config/godot" build/unsigned build/baseline
 unzip -p "$work/$templates" templates/android_release.apk > "$install_dir/android_release.apk"
 test -s "$install_dir/android_release.apk"
 cat > "$HOME/.config/godot/editor_settings-4.7.tres" <<SETTINGS
@@ -41,11 +44,10 @@ export/android/java_sdk_path = "$JAVA_HOME"
 SETTINGS
 
 "$godot" --headless --editor --import
-XDG_DATA_HOME="$work/smoke-user" "$godot" --headless --script tests/smoke.gd
+XDG_DATA_HOME="$work/smoke-user" "$godot" --headless --fixed-fps 60 --script tests/smoke.gd
 tools_dir=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
 test -x "$tools_dir/zipalign"
-# The ephemeral checkout carries the run number; the committed preset is unchanged.
-sed -i "s/^version\/code=1$/version\/code=${GITHUB_RUN_NUMBER:-1}/" export_presets.cfg
+sed -i "s|^version/code=.*|version/code=$code|" export_presets.cfg
 export_apk() {
   local stem="$1"
   "$godot" --headless --export-release Android "$work/$stem-raw.apk"
@@ -64,17 +66,16 @@ verify_package() {
 export_apk production
 cp "$work/production.apk" build/unsigned/VectorRange-unsigned.apk
 verify_package build/unsigned/VectorRange-unsigned.apk com.jjongjjongs.vectorrange
-sed -i "s/^package\/unique_name=.*/package\/unique_name=\"$preview_package\"/;s/^package\/name=.*/package\/name=\"Vector Range $game_version Preview\"/" export_presets.cfg
-export_apk preview
-
-# Never use this single-run test identity for the production package.
-keytool -genkeypair -noprompt -keystore "$work/preview.p12" -storetype PKCS12 \
-  -storepass android -keypass android -alias preview -keyalg RSA -keysize 2048 \
-  -validity 365 -dname "CN=Vector Range Preview"
-"$tools_dir/apksigner" sign --ks "$work/preview.p12" --ks-pass pass:android \
-  --ks-key-alias preview --out build/preview/VectorRange-preview.apk "$work/preview.apk"
-"$tools_dir/apksigner" verify --verbose build/preview/VectorRange-preview.apk
-verify_package build/preview/VectorRange-preview.apk "$preview_package"
-for dir in build/preview build/unsigned; do
-  (cd "$dir" && sha256sum *.apk > SHA256SUMS.txt)
-done
+# A tiny lower-version fixture lets the device exercise an actual package upgrade.
+mkdir "$work/fixture"
+cat > "$work/fixture/AndroidManifest.xml" <<MANIFEST
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.jjongjjongs.vectorrange" android:versionCode="$((code-1))">
+    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
+    <application android:hasCode="false" android:label="Vector Range"/>
+</manifest>
+MANIFEST
+platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
+"$tools_dir/aapt" package -f -M "$work/fixture/AndroidManifest.xml" -I "$platform" -F "$work/baseline.apk"
+"$tools_dir/zipalign" -f 4 "$work/baseline.apk" build/baseline/previous.apk
+(cd build/unsigned && sha256sum *.apk > SHA256SUMS.txt)

@@ -79,9 +79,61 @@ func run():
 	var settings := ConfigFile.new()
 	check(settings.load("user://records.cfg")==OK,"persist settings")
 	check(settings.get_value("settings","sound")==not previous and settings.get_value("records","score")>=400,"record and preference saved")
+	game.home()
+	game.hud.stack.get_node("PLAY").pressed.emit()
+	game.hud.stack.get_node("POLAR_AI_DUEL").pressed.emit()
+	game.hud.stack.get_node("START_DUEL").pressed.emit()
+	for i in 8: await physics_frame
+	check(game.versus and game.player.is_on_floor(),"Polar arena spawn")
+	var hud=game.hud.overlay
+	game.press_action(hud.action_center("AIM"))
+	game.press_action(hud.action_center("LOW"))
+	for i in 16: await physics_frame
+	check(game.eye.fov<43 and game.eye.position.y<0.92 and game.crouched,"touch aim and crouch")
+	game.player.position=game.polar.to_global(Vector3(-7.3,0.02,8.0))
+	for i in 3: await physics_frame
+	game.press_action(hud.action_center("LOW"))
+	check(game.crouched,"low tunnel blocks standing")
+	game.player.position=game.polar.to_global(Vector3(0,0.02,10))
+	for i in 4: await physics_frame
+	game.press_action(hud.action_center("LOW"))
+	game.press_action(hud.action_center("JUMP"))
+	for i in 10: await physics_frame
+	check(not game.crouched and game.player.position.y>0.45,"ground jump")
+	var rise:float=game.player.velocity.y
+	game.press_action(hud.action_center("JUMP"))
+	for i in 3: await physics_frame
+	check(game.player.velocity.y<rise,"no mid-air double jump")
+	for i in 70: await physics_frame
+	check(game.player.is_on_floor(),"jump lands")
+	var before:Vector3=game.rival.bot.position
+	game.pause_run()
+	game._physics_process(0.25)
+	check(game.rival.bot.position==before,"duel freezes while paused")
+	game.resume_run()
+	for i in 8: await physics_frame
+	check(game.rival.bot.position.distance_to(before)>0.1,"drone patrol")
+	game.start_duel()
+	for i in 2: await physics_frame
+	game.eye.look_at(game.rival.bot.global_position)
+	game.fire()
+	check(game.hits==1 and game.rival.grace>0,"tagging a visible drone")
+	game.start_duel()
+	for i in 300:
+		await physics_frame
+		if game.rival.bot_score>0: break
+	check(game.rival.bot_score>0,"AI pulse can tag stationary player")
+	game.rival.bot_score=5
+	game._physics_process(0.016)
+	check(game.mode=="result" and game.outcome()=="DRONE WINS","AI round outcome")
+	game.hud.stack.get_node("RETRY").pressed.emit()
+	check(game.versus and game.hits==0 and game.rival.bot_score==0,"duel retry")
+	game.remaining=0.001
+	game._physics_process(0.016)
+	check(game.mode=="result" and game.outcome()=="DRAW","timed draw")
 	game.speaker.stop()
 	await create_timer(0.15).timeout
 	game.queue_free()
 	await process_frame
-	if errors.is_empty(): print("PASS: Depot round, contacts, touch, recharge, pause, retry, menus and save.")
+	if errors.is_empty(): print("PASS: Depot round, contacts, touch, recharge, pause, retry, menus, save, Polar duel, AI, crouch, jump and aim.")
 	quit(0 if errors.is_empty() else 1)

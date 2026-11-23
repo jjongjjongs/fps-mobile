@@ -31,16 +31,8 @@ jobs:
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Export Android release and sign installable preview
+      - name: Test game and export production APK
         run: bash ci/android.sh
-      - name: Upload phone preview
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: VectorRange-preview-arm64
-          path: |
-            build/preview/*.apk
-            build/preview/SHA256SUMS.txt
-          if-no-files-found: error
       - name: Upload unsigned production APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -49,16 +41,21 @@ jobs:
             build/unsigned/*.apk
             build/unsigned/SHA256SUMS.txt
           if-no-files-found: error
-      - name: Sign production APK on manual builds
+      - name: Sign APKs with the stable release key
         id: signing
         if: github.event_name != 'pull_request'
         env:
           ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
         run: |
-          if [[ -n "$ANDROID_SIGNING" ]]; then
-            bash ci/sign.sh
-            echo 'signed=true' >> "$GITHUB_OUTPUT"
-          fi
+          if [[ -z "$ANDROID_SIGNING" ]]; then echo "::error::Set the ANDROID_SIGNING repository secret"; exit 1; fi
+          bash ci/sign.sh
+          echo 'signed=true' >> "$GITHUB_OUTPUT"
+      - name: Upload lower-version upgrade fixture
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: upgrade-fixture
+          path: build/baseline/previous-signed.apk
       - name: Upload signed release
         if: steps.signing.outputs.signed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -81,10 +78,9 @@ jobs:
       - name: Download the file intended for Releases
         env:
           GH_TOKEN: ${{ github.token }}
-          SIGNED: ${{ needs.android.outputs.signed }}
         run: |
-          variant=preview
-          if [[ "$SIGNED" == true ]]; then variant=release; fi
+          variant=release
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name upgrade-fixture --dir fixture
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "VectorRange-$variant-arm64" --dir apk
           cd apk
           sha256sum -c SHA256SUMS.txt
@@ -93,7 +89,7 @@ jobs:
           "$bin/apksigner" verify install.apk
           "$bin/aapt" dump badging install.apk > manifest
           sed -n "s/^package: name='\([^']*\)'.*/\1/p" manifest > package-name
-          grep -Eq '^com\.jjongjjongs\.vectorrange(\.preview\.v[0-9_]+)?$' package-name
+          grep -Fxq 'com.jjongjjongs.vectorrange' package-name
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -109,7 +105,8 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            adb install apk/install.apk
+            adb install fixture/previous-signed.apk
+            adb install -r apk/install.apk
             adb shell am start -W "$(adb shell cmd package resolve-activity --brief "$(cat apk/package-name)" | tail -1 | tr -d '\r')"
             sleep 5
             adb shell pidof "$(cat apk/package-name)"
@@ -130,14 +127,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.android.outputs.game_version }}
           REVISION: ${{ needs.android.outputs.game_commit }}
-          SIGNED: ${{ needs.android.outputs.signed }}
         run: |
           set -euo pipefail
-          variant=preview
-          flags=(--prerelease)
-          if [[ "$SIGNED" == true ]]; then variant=release; flags=(); fi
+          variant=release
           tag="v$VERSION"
-          if [[ "$variant" == preview ]]; then tag="$tag-preview"; fi
           filename="VectorRange-$VERSION-$variant-arm64.apk"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$filename"; then
             echo "The installable APK is already published for $tag."
@@ -147,6 +140,7 @@ jobs:
           (cd apk && sha256sum -c SHA256SUMS.txt)
           mv apk/*.apk "$filename"
           printf '%s\n' "안드로이드 ARM64 설치판입니다. 아래 Assets에서 **$filename**을 눌러 설치하세요." > notes.md
-          printf '\n![실제 플레이 화면](https://raw.githubusercontent.com/%s/%s/docs/images/depot.jpg)\n' "$GITHUB_REPOSITORY" "$REVISION" >> notes.md
-          gh release create "$tag" "$filename" --repo "$GITHUB_REPOSITORY" --target "$REVISION" --title "Vector Range $VERSION · Android $variant" --notes-file notes.md "${flags[@]}"
+          printf '\n![실제 플레이 화면](https://raw.githubusercontent.com/%s/%s/docs/images/polar.jpg)\n' "$GITHUB_REPOSITORY" "$REVISION" >> notes.md
+          echo "PLAY → POLAR AI DUEL → START DUEL. 드론과 90초 동안 먼저 5점을 내면 승리합니다. 0.1.x Preview와 함께 설치되며, 이후 정식판은 같은 앱으로 업데이트됩니다." >> notes.md
+          gh release create "$tag" "$filename" --repo "$GITHUB_REPOSITORY" --target "$REVISION" --title "Vector Range $VERSION · Android $variant" --notes-file notes.md
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].url' >> "$GITHUB_STEP_SUMMARY"

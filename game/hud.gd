@@ -109,12 +109,20 @@ func show_page(next: String):
 			button("RECORDS",func(): show_page("records"))
 			button("SETTINGS",func(): show_page("settings"))
 		"setup":
-			label("PLAY     /     DEPOT",15,MINT)
+			label("PLAY     /     SELECT MODE",15,MINT)
+			button("POLAR AI DUEL",func(): show_page("duel_setup"),true)
 			label("TIME ATTACK",38,CREAM)
 			label("30 SEC     /     +100 PER HIT",18,AMBER)
 			label("Equipment    /    PULSE",18,CREAM)
-			button("START RUN",game.start_run,true)
+			button("START RUN",game.start_run)
 			button("BACK",game.home)
+		"duel_setup":
+			label("POLAR STATION     /     1 VS 1",15,MINT)
+			label("DRONE DUEL",38,CREAM)
+			label("90 seconds  ·  First to 5 tags",18,AMBER)
+			label("Drag to look. Tap AIM to zoom.\nDuck under the service passage or\njump onto a platform to evade pulses.",16,CREAM)
+			button("START DUEL",game.start_duel,true)
+			button("BACK",func(): show_page("setup"))
 		"armory":
 			label("ARMORY     /     EQUIPPED",15,MINT)
 			label("PULSE",40,CREAM)
@@ -133,17 +141,17 @@ func show_page(next: String):
 			button("LOOK     "+["LOW","NORMAL","HIGH"][game.sensitivity],game.change_sensitivity)
 			button("BACK",game.back)
 		"pause":
-			label("DEPOT     /     TIME ATTACK",15,MINT)
+			label("POLAR     /     DRONE DUEL" if game.versus else "DEPOT     /     TIME ATTACK",15,MINT)
 			label("PAUSED",40,CREAM)
 			button("RESUME",game.resume_run,true)
 			button("SETTINGS",func(): show_page("settings"))
 			button("HOME",game.home)
 		"result":
-			label("DEPOT     /     TIME ATTACK",15,MINT)
-			label("RUN COMPLETE",36,CREAM)
-			label("Score      %d" % (game.hits*100),24,AMBER)
+			label("POLAR     /     DRONE DUEL" if game.versus else "DEPOT     /     TIME ATTACK",15,MINT)
+			label(game.outcome() if game.versus else "RUN COMPLETE",36,CREAM)
+			label(("You  %d     Drone  %d" % [game.hits,game.rival.bot_score]) if game.versus else "Score      %d" % (game.hits*100),24,AMBER)
 			label("Hits   %d / %d     ·     %d%%" % [game.hits,game.shots,game.accuracy()],18,CREAM)
-			button("RETRY",game.start_run,true)
+			button("RETRY",game.retry,true)
 			button("HOME",game.home)
 	card.reset_size()
 	refresh_safe_area()
@@ -151,7 +159,13 @@ func show_page(next: String):
 
 func update_play():
 	overlay.stick = game.stick
-	overlay.score = game.hits*100
+	overlay.duel = game.versus
+	overlay.score = game.hits if game.versus else game.hits*100
+	overlay.opponent = game.rival.bot_score if game.versus else 0
+	overlay.warning = game.versus and game.rival.warning>0
+	overlay.tagged = game.versus and game.rival.hit_feedback>0
+	overlay.zoom = game.zoom
+	overlay.low = game.crouched
 	overlay.seconds = ceili(game.remaining)
 	overlay.charges = game.charges
 	overlay.recharge = game.recharge
