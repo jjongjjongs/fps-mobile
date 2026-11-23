@@ -1,29 +1,84 @@
-name: Prepare Android offline signing tools
+name: Verify and publish signed Polar Station release
 on:
   push:
     branches: [release/offline-0.2.0]
 permissions:
   contents: read
+  actions: read
 jobs:
-  prepare:
+  upgrade-and-launch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Reassemble the offline-signed APK and verify the pinned certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 45278574608 -n VectorRange-unsigned-arm64 -D inputs
+          gh run download 45279183470 -n offline-tools -D tools
+          cp inputs/VectorRange-unsigned.apk tools/fixture.apk ci/offline/signatures.json .
+          python3 ci/offline/pack.py restore
+          bin=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
+          for apk in previous.apk VectorRange-0.2.0-release-arm64.apk; do
+            "$bin/apksigner" verify --verbose --print-certs "$apk" > certificate
+            grep -Eq "^((Signer #[0-9]+ certificate)|(V[0-9.]+ Signer: certificate)) SHA-256 digest: 767c05ea60ee5dcd423465eef7dd6ff0d4fadc18b1d3626a2964bdaef912db5f$" certificate
+          done
+          "$bin/aapt" dump badging VectorRange-0.2.0-release-arm64.apk > manifest
+          grep -F "package: name='com.jjongjjongs.vectorrange' versionCode='2000' versionName='0.2.0'" manifest
+          "$bin/zipalign" -c -P 16 4 VectorRange-0.2.0-release-arm64.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch the signed APK on Android 15
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install previous.apk
+            adb install -r VectorRange-0.2.0-release-arm64.apk
+            adb shell am start -W "$(adb shell cmd package resolve-activity --brief "com.jjongjjongs.vectorrange" | tail -1 | tr -d '\r')"
+            sleep 5
+            adb shell pidof "com.jjongjjongs.vectorrange"
+
+      - name: Upload verified release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-release
+          path: VectorRange-0.2.0-release-arm64.apk
+          if-no-files-found: error
+  publish:
+    needs: upgrade-and-launch
+    permissions:
+      contents: write
+      actions: read
     runs-on: ubuntu-24.04
     steps:
-      - name: Collect Android SDK signing tools and upgrade fixture
+      - name: Publish the tested binary on GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          set -eu
-          bin=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
-          mkdir materials
-          cp "$bin/lib/apksigner.jar" materials/
-          cat > AndroidManifest.xml <<'XML'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.jjongjjongs.vectorrange" android:versionCode="1999">
-              <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
-              <application android:hasCode="false" android:label="Vector Range"/>
-          </manifest>
-          XML
-          platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
-          "$bin/aapt" package -f -M AndroidManifest.xml -I "$platform" -F raw.apk
-          "$bin/zipalign" -f 4 raw.apk materials/fixture.apk
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: offline-tools
-          path: materials/
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" -n verified-release
+          apk=VectorRange-0.2.0-release-arm64.apk
+          if gh release view v0.2.0 --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -Fxq "$apk"; then exit 0; fi
+          cat > notes.md <<'NOTES'
+          **휴대폰 설치** · Assets에서 `VectorRange-0.2.0-release-arm64.apk`를 내려받으세요.
+
+          **PLAY → POLAR AI DUEL → START DUEL** · 북극 연구기지에서 드론과 1대1로 겨룹니다. 제한 시간은 90초이며 먼저 5점을 내면 승리합니다. **LOW**로 앉고, **JUMP**로 뛰고, **AIM**으로 확대 조준하세요.
+
+          0.2.0은 고정 배포 키를 사용하는 첫 버전입니다. 기존 Preview와 나란히 설치됩니다. 다음 정식 업데이트부터 기존 정식판 위에 설치할 수 있습니다.
+
+          ![북극 연구기지](https://raw.githubusercontent.com/jjongjjongs/fps-mobile/214ef7eeb3c9003b903a4c9f031c6886d00402af/docs/images/polar.jpg)
+          NOTES
+          gh release create v0.2.0 "$apk" --repo "$GITHUB_REPOSITORY" --target 214ef7eeb3c9003b903a4c9f031c6886d00402af --title "Vector Range 0.2.0 · Polar Station" --notes-file notes.md
