@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!129 &1
+PlayerSettings:
+  m_ObjectHideFlags: 0
+  productGUID: d9fba3f20ad54e69a0015b8975224804
+  companyName: Vector Range
+  productName: Vector Range
+  defaultScreenWidth: 1280
+  defaultScreenHeight: 720
+  defaultScreenOrientation: 3
+  allowedAutorotateToPortrait: 0
+  allowedAutorotateToPortraitUpsideDown: 0
+  allowedAutorotateToLandscapeRight: 1
+  allowedAutorotateToLandscapeLeft: 1
+  bundleVersion: 0.1.0
+  overrideDefaultApplicationIdentifier: 1
+  applicationIdentifier:
+    Android: com.jjongjjongs.vectorrange
+    Standalone: com.jjongjjongs.vectorrange
+  AndroidBundleVersionCode: 1
+  AndroidMinSdkVersion: 25
+  AndroidTargetSdkVersion: 0
+  AndroidTargetArchitectures: 2
+  androidUseCustomKeystore: 0
+  scriptingBackend:
+    Android: 1
+  activeInputHandler: 0
