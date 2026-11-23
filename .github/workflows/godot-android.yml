@@ -1,0 +1,56 @@
+name: Godot Android APK
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+
+jobs:
+  android:
+    if: github.event_name == 'workflow_dispatch' || (github.head_ref == 'godot/depot-mobile' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha || 'refs/heads/godot/depot-mobile' }}
+          persist-credentials: false
+      - name: Export Android release and sign installable preview
+        run: bash ci/android.sh
+      - name: Upload phone preview
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: VectorRange-preview-arm64
+          path: |
+            build/preview/*.apk
+            build/preview/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Upload unsigned production APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: VectorRange-unsigned-arm64
+          path: |
+            build/unsigned/*.apk
+            build/unsigned/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Sign production APK on manual builds
+        id: signing
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
+        run: |
+          if [[ -n "$ANDROID_SIGNING" ]]; then
+            bash ci/sign.sh
+            echo 'signed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload signed release
+        if: steps.signing.outputs.signed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: VectorRange-release-arm64
+          path: |
+            build/release/*.apk
+            build/release/SHA256SUMS.txt
+          if-no-files-found: error
