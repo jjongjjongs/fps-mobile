@@ -116,8 +116,12 @@ jobs:
             adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F 'versionName=0.3.0'
             adb shell am start -W "$(adb shell cmd package resolve-activity --brief com.jjongjjongs.vectorrange | tail -1 | tr -d '\r')"
             adb shell am force-stop com.jjongjjongs.vectorrange
-            python3 fixture/ci/verify-update.py "${{ needs.android.outputs.game_version }}"
+            if [ "${{ github.event_name }}" = workflow_dispatch ]; then python3 fixture/ci/verify-update.py "${{ needs.android.outputs.game_version }}"; else adb install -r apk/install.apk; fi
             adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F "versionName=${{ needs.android.outputs.game_version }}"
+            adb shell am force-stop com.jjongjjongs.vectorrange
+            adb shell am start -W "$(adb shell cmd package resolve-activity --brief com.jjongjjongs.vectorrange | tail -1 | tr -d '\r')"
+            sleep 8
+            adb shell pidof com.jjongjjongs.vectorrange
 
   publish:
     needs: [android, install-test]
