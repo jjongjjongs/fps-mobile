@@ -16,8 +16,8 @@ func run():
 	await process_frame
 	await physics_frame
 	check(game.hud.page=="home" and game.depot.rings.size()==5,"start menu and five targets")
-	game.hud.stack.get_node("PLAY").pressed.emit()
-	game.hud.stack.get_node("START_RUN").pressed.emit()
+	game.hud.stack.get_node("플레이").pressed.emit()
+	game.hud.stack.get_node("훈련_시작").pressed.emit()
 	await physics_frame
 	await physics_frame
 	check(game.mode=="play" and game.aim_index()==0,"start button and initial sightline")
@@ -58,7 +58,7 @@ func run():
 	check(game.stick==Vector2.ZERO and game.look_id==1,"independent finger release")
 	game._physics_process(30.0)
 	check(game.hud.page=="result" and game.best>=400 and game.accuracy()==80,"timeout and results")
-	game.hud.stack.get_node("RETRY").pressed.emit()
+	game.hud.stack.get_node("다시_도전").pressed.emit()
 	check(game.shots==0 and game.hits==0 and game.remaining==30 and game.charges==5,"retry reset")
 	var blocker := StaticBody3D.new()
 	game.add_child(blocker)
@@ -70,19 +70,19 @@ func run():
 	await physics_frame
 	check(game.aim_index()==-1,"nearby solid prevents hits through cover")
 	game.home()
-	game.hud.stack.get_node("ARMORY").pressed.emit()
+	game.hud.stack.get_node("무기고").pressed.emit()
 	check(game.pulse.visible and game.hud.page=="armory","armory preview")
-	game.hud.stack.get_node("BACK").pressed.emit()
-	game.hud.stack.get_node("SETTINGS").pressed.emit()
+	game.hud.stack.get_node("뒤로").pressed.emit()
+	game.hud.stack.get_node("설정").pressed.emit()
 	var previous: bool=game.sound
 	game.toggle_sound()
 	var settings := ConfigFile.new()
 	check(settings.load("user://records.cfg")==OK,"persist settings")
 	check(settings.get_value("settings","sound")==not previous and settings.get_value("records","score")>=400,"record and preference saved")
 	game.home()
-	game.hud.stack.get_node("PLAY").pressed.emit()
-	game.hud.stack.get_node("POLAR_AI_DUEL").pressed.emit()
-	game.hud.stack.get_node("START_DUEL").pressed.emit()
+	game.hud.stack.get_node("플레이").pressed.emit()
+	game.hud.stack.get_node("극지_드론_대결").pressed.emit()
+	game.hud.stack.get_node("대결_시작").pressed.emit()
 	for i in 8: await physics_frame
 	check(game.versus and game.player.is_on_floor(),"Polar arena spawn")
 	var hud=game.hud.overlay
@@ -125,12 +125,12 @@ func run():
 	check(game.rival.bot_score>0,"AI pulse can tag stationary player")
 	game.rival.bot_score=5
 	game._physics_process(0.016)
-	check(game.mode=="result" and game.outcome()=="DRONE WINS","AI round outcome")
-	game.hud.stack.get_node("RETRY").pressed.emit()
+	check(game.mode=="result" and game.outcome()=="드론 승리","AI round outcome")
+	game.hud.stack.get_node("다시_도전").pressed.emit()
 	check(game.versus and game.hits==0 and game.rival.bot_score==0,"duel retry")
 	game.remaining=0.001
 	game._physics_process(0.016)
-	check(game.mode=="result" and game.outcome()=="DRAW","timed draw")
+	check(game.mode=="result" and game.outcome()=="무승부","timed draw")
 	game.speaker.stop()
 	await create_timer(0.15).timeout
 	game.queue_free()

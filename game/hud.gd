@@ -1,5 +1,6 @@
 extends CanvasLayer
 
+const Updater = preload("res://game/updater.gd")
 const Match = preload("res://game/arena_match.gd")
 const Arena = preload("res://game/arena.gd")
 const Gear = preload("res://game/loadout.gd")
@@ -30,6 +31,7 @@ func build(owner_game):
 	overlay.hide()
 	refresh_safe_area()
 	root.resized.connect(refresh_safe_area)
+	game.updates.changed.connect(update_changed)
 	show_page("home")
 
 func refresh_safe_area():
@@ -105,76 +107,115 @@ func show_page(next: String):
 	card.add_child(stack)
 	match next:
 		"home":
-			label("DEPOT     /     TRAINING HALL",15,MINT)
-			label("VECTOR RANGE",40,CREAM)
-			button("PLAY",func(): show_page("setup"),true)
-			button("ARMORY",func(): game.armory())
-			button("RECORDS",func(): show_page("records"))
-			button("SETTINGS",func(): show_page("settings"))
+			label("벡터 기지    /    훈련 센터",15,MINT)
+			label("벡터 레인지",40,CREAM)
+			button("플레이",func(): show_page("setup"),true)
+			button("무기고",func(): game.armory())
+			button("기록",func(): show_page("records"))
+			button("설정",func(): show_page("settings"))
+			button("업데이트",open_updates)
+		"update":
+			draw_update()
 		"setup":
-			label("PLAY     /     SELECT MODE",15,MINT)
-			button("ARENA MATCH",func(): show_page("arena_modes"),true)
-			button("POLAR AI DUEL",func(): show_page("duel_setup"))
-			label("TIME ATTACK",38,CREAM)
-			label("30 SEC     /     +100 PER HIT",18,AMBER)
-			label("Equipment    /    "+Gear.NAMES[game.weapon],18,CREAM)
-			button("START RUN",game.start_run)
-			button("BACK",game.home)
+			label("플레이    /    모드 선택",15,MINT)
+			button("아레나 대전",func(): show_page("arena_modes"),true)
+			button("극지 드론 대결",func(): show_page("duel_setup"))
+			label("시간 도전",38,CREAM)
+			label("30초    /    명중당 100점",18,AMBER)
+			label("훈련 장비    /    "+Gear.NAMES[game.secondary],18,CREAM)
+			button("훈련 시작",game.start_run)
+			button("뒤로",game.home)
 		"arena_modes":
-			label("ARENA     /     SELECT MODE",15,MINT)
+			label("아레나    /    모드 선택",15,MINT)
 			for i in Match.NAMES.size():
 				button(Match.NAMES[i],select_rule.bind(i))
-			button("BACK",func(): show_page("setup"))
+			button("뒤로",func(): show_page("setup"))
 		"arena_setup":
-			label("OFFLINE ARENA     /     4 PLAYERS",15,MINT)
+			label("오프라인 아레나    /    4인",15,MINT)
 			label(Match.NAMES[game.chosen_rule],29,CREAM)
 			label(Match.BRIEFS[game.chosen_rule].replace(". ", ".\n"),16,CREAM)
-			button("MAP   "+Arena.NAMES[game.chosen_map],cycle_map)
-			button("GEAR   "+Gear.NAMES[game.weapon],game.cycle_weapon)
-			button("START MATCH",game.start_match,true)
-			button("BACK",func(): show_page("arena_modes"))
+			button("전장   "+Arena.NAMES[game.chosen_map],cycle_map)
+			button("주무기   "+Gear.NAMES[game.primary],game.select_slot.bind(true))
+			button("보조무기   "+Gear.NAMES[game.secondary],game.select_slot.bind(false))
+			button("대전 시작",game.start_match,true)
+			button("뒤로",func(): show_page("arena_modes"))
 		"duel_setup":
-			label("POLAR STATION     /     1 VS 1",15,MINT)
-			label("DRONE DUEL",38,CREAM)
-			label("90 seconds  ·  First to 5 tags",18,AMBER)
-			label("Drag to look. Tap AIM to zoom.\nDuck under the service passage or\njump onto a platform to evade pulses.",16,CREAM)
-			button("START DUEL",game.start_duel,true)
-			button("BACK",func(): show_page("setup"))
+			label("극지 연구소    /    1 대 1",15,MINT)
+			label("드론 대결",38,CREAM)
+			label("90초   ·   5점 선취",18,AMBER)
+			label("화면을 밀어 둘러보고 조준을 눌러 확대하세요.\n낮은 통로에서 앉거나 발판 위로 점프해\n드론의 공격을 피하세요.",16,CREAM)
+			button("대결 시작",game.start_duel,true)
+			button("뒤로",func(): show_page("setup"))
 		"armory":
-			label("ARMORY     /     EQUIPPED",15,MINT)
+			label(("주무기" if game.weapon>=3 else "보조무기")+"    /    "+Gear.TYPES[game.weapon],15,MINT)
 			label(Gear.NAMES[game.weapon],40,CREAM)
 			label(Gear.INFO[game.weapon],17,MINT)
-			label("%d charges    /    Auto recharge"%game.capacity(),17,CREAM)
-			button("CHANGE WEAPON",game.cycle_weapon,true)
-			button("BACK",game.home)
+			label("충전량 %d발    /    자동 충전"%game.capacity(),17,CREAM)
+			button("주무기   "+Gear.NAMES[game.primary],game.select_slot.bind(true),game.weapon>=3)
+			button("보조무기   "+Gear.NAMES[game.secondary],game.select_slot.bind(false),game.weapon<3)
+			label("같은 슬롯을 한 번 더 누르면 무기가 바뀝니다.",15,CREAM)
+			button("뒤로",game.home)
 		"records":
-			label("DEPOT     /     RECORDS",15,MINT)
-			label("PERSONAL BEST",34,CREAM)
-			label("Top score     %d" % game.best,22,AMBER)
-			label("Best accuracy     %d%%" % game.best_accuracy,18,CREAM)
-			button("BACK",game.home)
+			label("훈련장    /    기록",15,MINT)
+			label("개인 최고 기록",34,CREAM)
+			label("최고 점수    %d점" % game.best,22,AMBER)
+			label("최고 명중률    %d%%" % game.best_accuracy,18,CREAM)
+			button("뒤로",game.home)
 		"settings":
-			label("PREFERENCES",15,MINT)
-			label("SETTINGS",38,CREAM)
-			button("SOUND     "+("ON" if game.sound else "OFF"),game.toggle_sound)
-			button("LOOK     "+["LOW","NORMAL","HIGH"][game.sensitivity],game.change_sensitivity)
-			button("BACK",game.back)
+			label("환경 설정",15,MINT)
+			label("설정",38,CREAM)
+			button("소리    "+("켜짐" if game.sound else "꺼짐"),game.toggle_sound)
+			button("시점 감도    "+["낮음","보통","높음"][game.sensitivity],game.change_sensitivity)
+			button("뒤로",game.back)
 		"pause":
 			label(round_title(),15,MINT)
-			label("PAUSED",40,CREAM)
-			button("RESUME",game.resume_run,true)
-			button("SETTINGS",func(): show_page("settings"))
-			button("HOME",game.home)
+			label("일시 정지",40,CREAM)
+			button("계속하기",game.resume_run,true)
+			button("설정",func(): show_page("settings"))
+			button("메인으로",game.home)
 		"result":
 			label(round_title(),15,MINT)
-			label(game.battle.result if game.battle else (game.outcome() if game.versus else "RUN COMPLETE"),36,CREAM)
-			label(game.battle.scoreboard() if game.battle else ("You  %d     Drone  %d" % [game.hits,game.rival.bot_score]) if game.versus else "Score      %d" % (game.hits*100),24,AMBER)
-			label("Hits   %d / %d     ·     %d%%" % [game.hits,game.shots,game.accuracy()],18,CREAM)
-			button("RETRY",game.retry,true)
-			button("HOME",game.home)
+			label(game.battle.result if game.battle else (game.outcome() if game.versus else "훈련 완료"),36,CREAM)
+			label(game.battle.scoreboard() if game.battle else ("나  %d     드론  %d" % [game.hits,game.rival.bot_score]) if game.versus else "점수    %d" % (game.hits*100),24,AMBER)
+			label("명중   %d / %d    ·    %d%%" % [game.hits,game.shots,game.accuracy()],18,CREAM)
+			button("다시 도전",game.retry,true)
+			button("메인으로",game.home)
 	card.reset_size()
 	refresh_safe_area()
 	card.resized.connect(refresh_safe_area)
+
+func open_updates():
+	show_page("update")
+	if game.updates.stage in [Updater.Stage.IDLE,Updater.Stage.CURRENT,Updater.Stage.FAILED]:
+		game.updates.check()
+
+func update_changed():
+	if page=="update": show_page("update")
+
+func draw_update():
+	var u=game.updates
+	label("설치된 버전   "+str(ProjectSettings.get_setting("application/config/version")),16,MINT)
+	label("게임 업데이트",32,CREAM)
+	var tip:=Label.new()
+	tip.text=u.message
+	tip.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+	tip.custom_minimum_size.x=300
+	stack.add_child(tip)
+	match u.stage:
+		Updater.Stage.AVAILABLE: button("내려받기",u.download,true)
+		Updater.Stage.READY: button("업데이트 설치",u.install,true)
+		Updater.Stage.CURRENT,Updater.Stage.FAILED: button("다시 확인",u.check)
+		Updater.Stage.DOWNLOADING:
+			var progress:=ProgressBar.new()
+			progress.name="DownloadProgress"
+			progress.max_value=u.size_bytes
+			stack.add_child(progress)
+	button("뒤로",game.home)
+
+func _process(_delta):
+	if page=="update" and game.updates.stage==Updater.Stage.DOWNLOADING:
+		var progress=stack.get_node_or_null("DownloadProgress")
+		if progress: progress.value=game.updates.transfer.get_downloaded_bytes()
 
 func select_rule(value: int):
 	game.chosen_rule=value
@@ -186,7 +227,7 @@ func cycle_map():
 
 func round_title() -> String:
 	if game.battle: return Arena.NAMES[game.chosen_map]+"  /  "+Match.NAMES[game.chosen_rule]
-	return "POLAR  /  DRONE DUEL" if game.versus else "DEPOT  /  TIME ATTACK"
+	return "극지 연구소  /  드론 대결" if game.versus else "훈련장  /  시간 도전"
 
 func update_play():
 	overlay.arena_status=game.battle.status() if game.battle else ""
@@ -195,11 +236,12 @@ func update_play():
 		var target:Vector3=game.battle.arena.marker.global_position
 		var local:Vector3=game.player.to_local(target)
 		var angle:=rad_to_deg(atan2(local.x,-local.z))
-		var arrow:="AHEAD" if absf(angle)<25 else ("BEHIND" if absf(angle)>145 else ("RIGHT" if angle>0 else "LEFT"))
+		var arrow:="앞" if absf(angle)<25 else ("뒤" if absf(angle)>145 else ("오른쪽" if angle>0 else "왼쪽"))
 		overlay.beacon="%s   %s   %dm"%[game.battle.arena.marker.text,arrow,roundi(Vector2(local.x,local.z).length())]
 	overlay.arena_score=game.battle.scoreboard() if game.battle else ""
 	overlay.health_flash=game.battle!=null and game.battle.player_flash>0
 	overlay.tool_name=Gear.NAMES[game.weapon]
+	overlay.slot_text="보조로" if game.weapon==game.primary else "주무기로"
 	overlay.capacity=game.capacity()
 	overlay.charge_time=Gear.RECHARGE[game.weapon]
 	overlay.stick = game.stick

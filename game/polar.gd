@@ -21,7 +21,7 @@ func build():
 		box(Vector3(0,1.65,z),Vector3(28.3,3.3,0.5),WHITE,true)
 		box(Vector3(0,3.34,z),Vector3(28.4,0.14,0.66),SNOW)
 	station(0,-15.4,12.0,2.8,4.9)
-	sign_text("P O L A R      /      0 2",Vector3(0,3.05,-13.96),0.0068)
+	sign_text("극지 연구소    /    02",Vector3(0,3.05,-13.96),0.0068)
 	# Elevated enclosed gallery; floor and side frames do not obstruct the aisle.
 	box(Vector3(0,4.72,-7.1),Vector3(19,0.44,2.8),STEEL,true)
 	box(Vector3(0,6.75,-7.1),Vector3(19.4,0.24,3.0),SNOW)

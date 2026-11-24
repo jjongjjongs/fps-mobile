@@ -3,13 +3,13 @@ extends Node3D
 const Arena = preload("res://game/arena.gd")
 const Drone = preload("res://game/duel.gd")
 enum Rule { DEATHMATCH, TEAM, DEMOLITION, CONTROL, SURVIVAL }
-const NAMES := ["DEATHMATCH","TEAM DEATHMATCH","DEMOLITION","CONTROL","LAST STANDING"]
+const NAMES := ["데스매치","팀 데스매치","폭파 미션","점령전","개인 생존전"]
 const BRIEFS := [
-	"Everyone for themselves. First to 8 tags.",
-	"Blue vs orange, 2 on 2. First to 12 tags.",
-	"Arm site A by holding it for 3s. Defend the core for 18s. Defenders can disarm in 4s.",
-	"Hold the marked zone alone with your team. First to 30 control points.",
-	"Four contenders, one life each. Be the last one flying."]
+	"각자 싸워 먼저 8점을 획득하세요.",
+	"2 대 2 대전. 팀 점수 12점을 먼저 획득하세요.",
+	"A에서 3초 동안 코어를 설치하세요. 18초 동안 지키면 승리합니다. 방어팀은 4초 만에 해제할 수 있습니다.",
+	"아군만 거점에 있으면 초당 1점을 얻습니다. 먼저 30점을 획득하세요.",
+	"네 명 모두 한 번의 기회가 있습니다. 마지막까지 생존하세요."]
 const COLORS := [Color("#5de0cc"),Color("#8ebaff"),Color("#ff9262"),Color("#e6a7ed")]
 const HP := 4
 var arena := Arena.new()
@@ -49,7 +49,7 @@ func build(controller, chosen_rule: int, map_id: int):
 	game=controller
 	rule=chosen_rule
 	add_child(arena)
-	arena.build_map(map_id,"A" if rule==Rule.DEMOLITION else ("ZONE" if rule==Rule.CONTROL else ""))
+	arena.build_map(map_id,"A" if rule==Rule.DEMOLITION else ("거점" if rule==Rule.CONTROL else ""))
 	beam_mesh.top_radius=0.028
 	beam_mesh.bottom_radius=0.028
 	beam_mesh.height=1
@@ -90,7 +90,7 @@ func build(controller, chosen_rule: int, map_id: int):
 			unit.bot.set_meta("arena_slot",i)
 			var label:=Label3D.new()
 			label.billboard=BaseMaterial3D.BILLBOARD_ENABLED
-			label.text="ALLY" if grouped() and i==1 else "D-%02d"%i
+			label.text="아군" if grouped() and i==1 else "D-%02d"%i
 			label.modulate=team_color(i)
 			label.pixel_size=0.0045
 			label.position.y=1.02
@@ -150,7 +150,7 @@ func check_scores():
 		var alive: Array[int]=[]
 		for i in 4:
 			if health[i]>0: alive.append(i)
-		if alive.size()==1: result="YOU WIN" if alive[0]==0 else "DRONE %d WINS"%alive[0]
+		if alive.size()==1: result="승리" if alive[0]==0 else "드론 %d 승리"%alive[0]
 	elif rule==Rule.DEATHMATCH and points.max()>=8: finish_time()
 	elif rule==Rule.TEAM and sides.max()>=12: finish_time()
 	elif rule==Rule.CONTROL and sides.max()>=30: finish_time()
@@ -158,9 +158,9 @@ func check_scores():
 func finish_time():
 	if result!="": return
 	if rule==Rule.DEMOLITION:
-		result="CORE TRIGGERED" if armed else "DEFENDERS WIN"
+		result="코어 작동 성공" if armed else "방어팀 승리"
 	elif grouped():
-		result="DRAW" if sides[0]==sides[1] else ("BLUE WINS" if sides[0]>sides[1] else "ORANGE WINS")
+		result="무승부" if sides[0]==sides[1] else ("청팀 승리" if sides[0]>sides[1] else "주황팀 승리")
 	else:
 		var best: Array[int]=[]
 		var highest:=-1
@@ -171,7 +171,7 @@ func finish_time():
 				highest=value
 				best.clear()
 			if value==highest: best.append(i)
-		result="DRAW" if best.size()!=1 else ("YOU WIN" if best[0]==0 else "DRONE %d WINS"%best[0])
+		result="무승부" if best.size()!=1 else ("승리" if best[0]==0 else "드론 %d 승리"%best[0])
 
 func respawn(i: int):
 	
@@ -192,8 +192,7 @@ func respawn(i: int):
 	bodies[i].collision_layer=1
 	if i==0:
 		spawn_player()
-		game.charges=game.capacity()
-		game.recharge=0
+		game.refill()
 		game.pulse.show()
 	else:
 		bodies[i].position=arena.point(safe)+Vector3.UP*1.3
@@ -284,16 +283,16 @@ func objective(dt: float):
 	if armed:
 		fuse=maxf(0,fuse-dt)
 		if fuse<=0:
-			result="CORE TRIGGERED"
+			result="코어 작동 성공"
 			return
 	if controlling==(1 if armed else 0): objective_progress+=dt
 	else: objective_progress=0
-	if armed and objective_progress>=4: result="CORE DISARMED"
+	if armed and objective_progress>=4: result="코어 해제"
 	elif not armed and objective_progress>=3:
 		armed=true
 		game.remaining=fuse
 		objective_progress=0
-		arena.marker.text="CORE"
+		arena.marker.text="코어"
 
 func advance(dt: float):
 	player_flash=maxf(0,player_flash-dt)
@@ -311,15 +310,15 @@ func advance(dt: float):
 	if result=="" and rule in [Rule.CONTROL,Rule.DEMOLITION]: objective(dt)
 
 func status() -> String:
-	if health[0]==0: return "SPECTATING" if rule==Rule.SURVIVAL else "RESPAWN  %.1f"%maxf(0,revive[0])
-	var info:="ARMOR  %d/%d"%[health[0],HP]
-	if rule==Rule.CONTROL: return info+"     ZONE  "+(["CONTESTED" if contested else "OPEN","BLUE","ORANGE"][controlling+1])
+	if health[0]==0: return "관전 중" if rule==Rule.SURVIVAL else "부활까지  %.1f초"%maxf(0,revive[0])
+	var info:="장갑  %d/%d"%[health[0],HP]
+	if rule==Rule.CONTROL: return info+"    거점  "+(["교전 중" if contested else "비어 있음","청팀","주황팀"][controlling+1])
 	if rule==Rule.DEMOLITION:
-		return info+("     DEFEND CORE  %ds   DISARM %d%%"%[ceili(fuse),int(objective_progress*25)] if armed else "     HOLD A   %d%%"%int(objective_progress*100/3))
-	if rule==Rule.SURVIVAL: return info+"     ALIVE  %d"%(4-health.count(0))
+		return info+("    방어 %d초   해제 %d%%"%[ceili(fuse),int(objective_progress*25)] if armed else "    설치 %d%%"%int(objective_progress*100/3))
+	if rule==Rule.SURVIVAL: return info+"    생존 %d명"%(4-health.count(0))
 	return info
 
 func scoreboard() -> String:
-	if rule in [Rule.TEAM,Rule.CONTROL]: return "BLUE %d   /   %d ORANGE"%sides
-	if rule==Rule.DEMOLITION: return "BLUE  /  ATTACK"
-	return "YOU %d   /   TOP %d"%[points[0],points.max()]
+	if rule in [Rule.TEAM,Rule.CONTROL]: return "청팀 %d   /   주황팀 %d"%sides
+	if rule==Rule.DEMOLITION: return "청팀  /  공격"
+	return "나 %d   /   선두 %d"%[points[0],points.max()]

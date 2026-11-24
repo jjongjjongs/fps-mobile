@@ -15,11 +15,11 @@ func run():
 	root.add_child(game)
 	await process_frame
 	game.sound=false
-	game.hud.stack.get_node("PLAY").pressed.emit()
-	game.hud.stack.get_node("ARENA_MATCH").pressed.emit()
-	game.hud.stack.get_node("TEAM_DEATHMATCH").pressed.emit()
+	game.hud.stack.get_node("플레이").pressed.emit()
+	game.hud.stack.get_node("아레나_대전").pressed.emit()
+	game.hud.stack.get_node("팀_데스매치").pressed.emit()
 	game.hud.cycle_map()
-	game.hud.stack.get_node("START_MATCH").pressed.emit()
+	game.hud.stack.get_node("대전_시작").pressed.emit()
 	for i in 4: await physics_frame
 	var battle=game.battle
 	check(battle.rule==Match.Rule.TEAM and battle.arena.map_id==1,"menu starts chosen mode and map")
@@ -32,7 +32,7 @@ func run():
 	check(battle.health[2]==4 and battle.protection[2]>0,"respawn and protection")
 	battle.sides[0]=11
 	battle.damage(0,3,4)
-	check(battle.result=="BLUE WINS","team target")
+	check(battle.result=="청팀 승리","team target")
 	for map_id in 2:
 		for rule in 5:
 			game.chosen_map=map_id
@@ -51,7 +51,7 @@ func run():
 				Match.Rule.DEATHMATCH:
 					battle.points[2]=7
 					battle.damage(2,1,4)
-					check(battle.result=="DRONE 2 WINS","individual frag limit")
+					check(battle.result=="드론 2 승리","individual frag limit")
 				Match.Rule.CONTROL:
 					game.player.global_position=battle.arena.to_global(battle.arena.point(battle.arena.site))
 					battle.objective(1.01)
@@ -67,34 +67,51 @@ func run():
 					battle.bodies[2].global_position=at+Vector3.UP
 					game.player.position.x+=7
 					battle.objective(4.01)
-					check(battle.result=="CORE DISARMED","AI disarms")
+					check(battle.result=="코어 해제","AI disarms")
 				Match.Rule.SURVIVAL:
 					battle.damage(0,2,4)
 					battle.advance(3)
 					check(battle.health[2]==0,"survival one life")
 					battle.damage(0,1,4)
 					battle.damage(0,3,4)
-					check(battle.result=="YOU WIN","last player wins")
+					check(battle.result=="승리","last player wins")
 	game.chosen_rule=Match.Rule.CONTROL
 	game.start_match()
 	for i in 720: await physics_frame
 	check(game.battle.points.max()>0 or game.battle.sides.max()>0,"AI can independently fight or contest objective")
 	game.home()
 	game.armory()
-	game.cycle_weapon()
+	game.select_slot(false)
+	game.select_slot(false)
 	check(game.weapon==1 and game.capacity()==12,"equip Flux")
 	game.start_match()
+	game.swap()
 	game.fire_id=1
 	for i in 44: await physics_frame
 	check(game.shots>=4 and game.charges<12,"hold to repeat")
 	game.home()
 	game.armory()
-	game.cycle_weapon()
+	game.select_slot(false)
 	game.start_match()
+	game.swap()
+	game.shot_delay=0
 	check(game.weapon==2 and game.charges==3,"equip Prism")
 	game.fire()
 	game.fire()
 	check(game.shots==1 and game.shot_delay>0.7,"precision cooldown")
+	var spent:int=game.charges
+	game.swap()
+	game.swap()
+	check(game.charges==spent,"switching slots preserves ammunition")
+	game.home()
+	game.armory()
+	for id in range(3,7):
+		game.primary=id
+		game.equip(id)
+		check(game.pulse.get_child_count()>6 and game.weapon==id,"primary model and slot")
+	game.save_prefs()
+	var saved:=ConfigFile.new()
+	check(saved.load("user://records.cfg")==OK and saved.get_value("settings","weapon")==2 and saved.get_value("settings","primary")==6,"independent persistent loadout")
 	game.home()
 	check(game.battle==null and game.player.collision_layer==1,"exit arena")
 	game.queue_free()

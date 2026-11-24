@@ -61,6 +61,8 @@ verify_package() {
   grep -Fq "package: name='$package'" "$work/manifest"
   grep -Fq "versionName='$game_version'" "$work/manifest"
   grep -Eq "^native-code: 'arm64-v8a' *$" "$work/manifest"
+  grep -Fq 'android.permission.INTERNET' "$work/manifest"
+  grep -Fq 'android.permission.REQUEST_INSTALL_PACKAGES' "$work/manifest"
   if grep -q '^application-debuggable' "$work/manifest"; then exit 1; fi
 }
 
@@ -68,3 +70,18 @@ export_apk production
 cp "$work/production.apk" build/unsigned/VectorRange-unsigned.apk
 verify_package build/unsigned/VectorRange-unsigned.apk com.jjongjjongs.vectorrange
 (cd build/unsigned && sha256sum *.apk > SHA256SUMS.txt)
+
+# Build a disposable lower-version app to exercise the first in-app upgrade against
+# the published 0.3.0. The release above contains no test driver.
+mkdir -p build/probe
+sed -i 's|^version/code=.*|version/code=2999|;s|^version/name=.*|version/name="0.2.999"|' export_presets.cfg
+sed -i 's|^config/version=.*|config/version="0.2.999"|' project.godot
+sed -i 's|/releases/latest"|/releases/tags/v0.3.0"|' game/updater.gd
+python3 - <<'PYPROBE'
+from pathlib import Path
+p=Path("game/range.gd")
+p.write_text(p.read_text().replace("func _ready():", 'func _ready():\n\tcall_deferred("run_upgrade_probe")', 1))
+PYPROBE
+cat ci/probe.gd.inc >> game/range.gd
+export_apk probe
+cp "$work/probe.apk" build/probe/input.apk

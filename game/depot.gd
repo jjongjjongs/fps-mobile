@@ -112,7 +112,7 @@ func build():
 	for h in range(11):
 		box(Vector3(0,0.3+h*0.32,-21.49),Vector3(7.3,0.045,0.06),STEEL)
 	bake_geometry()
-	sign_text("D E P O T      /      0 1",Vector3(0,4.75,-21.4),0.011)
+	sign_text("훈련장    /    01",Vector3(0,4.75,-21.4),0.011)
 	sign_text("B   0 2",Vector3(-6.8,2.9,-21.65),0.014)
 	sign_text("B   0 3",Vector3(6.8,2.9,-21.65),0.014)
 	for pos in [Vector3(0,1.5,-3.5),Vector3(-4.0,2.1,-8),Vector3(4.7,2.5,-10),Vector3(-2.4,1.7,-13.8),Vector3(2.2,3.1,-17)]:
@@ -164,7 +164,7 @@ func architecture():
 			box(Vector3(35+x*0.8+0.23,1.75+j*0.085,-2.553),Vector3(0.17,0.024,0.016),DARK)
 	box(Vector3(35,1.12,-2.51),Vector3(8,0.024,0.04),PAINT,false,true)
 	box(Vector3(35,2.22,-2.51),Vector3(8,0.022,0.04),IVORY,false,true)
-	sign_text("P U L S E    /    0 1",Vector3(36.55,2.06,-2.50),0.0026)
+	sign_text("장비 전시실    /    01",Vector3(36.55,2.06,-2.50),0.0026)
 
 	for side in [-1.0,1.0]:
 		for z in range(-18,10,4):

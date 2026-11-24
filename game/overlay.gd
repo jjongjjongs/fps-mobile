@@ -15,7 +15,7 @@ var arena_status := ""
 var beacon := ""
 var arena_score := ""
 var health_flash := false
-var tool_name := "PULSE"
+var tool_name := "펄스"
 var capacity := 5
 var charge_time := 1.05
 var insets := Vector4.ZERO
@@ -26,7 +26,9 @@ var warning := false
 var tagged := false
 var zoom := false
 var low := false
-const ACTIONS := {"AIM":Vector2(0,-136),"LOW":Vector2(-102,12),"JUMP":Vector2(-92,-67)}
+var slot_text := "보조로"
+const ACTION_LABELS := {"AIM":"조준","LOW":"앉기","JUMP":"점프"}
+const ACTIONS := {"SWAP":Vector2(-177,13),"AIM":Vector2(0,-136),"LOW":Vector2(-102,12),"JUMP":Vector2(-92,-67)}
 
 func action_center(action: String) -> Vector2:
 	return fire_center()+Vector2(ACTIONS[action])
@@ -75,19 +77,19 @@ func _draw():
 	if recharge>0:
 		draw_arc(f,48,-PI/2,-PI/2+TAU*clampf(1-recharge/charge_time,0.001,1),48,MINT,5,true)
 	caption(tool_name,f+Vector2(-45,6),90,18,AMBER)
-	caption("CHARGING" if recharge>0 else "%d  /  %d" % [charges,capacity],f+Vector2(-58,-61),116,15,CREAM)
+	caption("충전 중" if recharge>0 else "%d  /  %d" % [charges,capacity],f+Vector2(-58,-61),116,15,CREAM)
 	for action in ACTIONS:
 		var point:=action_center(action)
 		var active: bool=(action=="AIM" and zoom) or (action=="LOW" and low)
 		draw_circle(point,29,INK,true,-1,true)
 		draw_arc(point,29,0,TAU,40,MINT if active else CREAM,2,true)
-		caption(action,point+Vector2(-28,5),56,14,MINT if active else CREAM)
+		caption(slot_text if action=="SWAP" else ACTION_LABELS[action],point+Vector2(-28,5),56,14,MINT if active else CREAM)
 	if warning or tagged:
-		caption("DRONE +1" if tagged else "INCOMING PULSE",Vector2(cx-106,81+t),212,16,AMBER)
+		caption("드론 +1" if tagged else "펄스 접근",Vector2(cx-106,81+t),212,16,AMBER)
 	var c := size/2
 	var color := MINT if aimed else CREAM
 	draw_circle(c,2.7,color)
 	for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c+d*6,c+d*10,color,1.4,true)
 	if flash:
-		caption("HIT" if arena_score!="" else ("+1" if duel else "+100"),c+Vector2(9,-13),77,21,AMBER)
+		caption("명중" if arena_score!="" else ("+1" if duel else "+100"),c+Vector2(9,-13),77,21,AMBER)

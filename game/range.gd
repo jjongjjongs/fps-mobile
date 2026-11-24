@@ -6,7 +6,15 @@ const Gear = preload("res://game/loadout.gd")
 var battle: Match
 var chosen_rule := 0
 var chosen_map := 0
-var weapon := 0
+const Updater = preload("res://game/updater.gd")
+var updates := Updater.new()
+var primary := 3
+var secondary := 0
+var weapon := 3
+var models := {}
+var spare_charges := 0
+var spare_recharge := 0.0
+var spare_delay := 0.0
 var shot_delay := 0.0
 var aim_end := Vector3.ZERO
 var mouse_fire := false
@@ -79,8 +87,10 @@ func _ready():
 	tones.append(tone(220,145))
 	tones.append(tone(700,1030))
 	prefs.load("user://records.cfg")
-	weapon=clampi(prefs.get_value("settings","weapon",0),0,Gear.NAMES.size()-1)
-	pulse=Gear.make(weapon,depot,eye)
+	secondary=clampi(prefs.get_value("settings","weapon",0),0,2)
+	primary=clampi(prefs.get_value("settings","primary",3),3,6)
+	equip(primary)
+	add_child(updates)
 	best = prefs.get_value("records","score",0)
 	best_accuracy = prefs.get_value("records","accuracy",0)
 	sound = prefs.get_value("settings","sound",true)
@@ -109,7 +119,8 @@ func save_prefs():
 	prefs.set_value("records","accuracy",best_accuracy)
 	prefs.set_value("settings","sound",sound)
 	prefs.set_value("settings","look",sensitivity)
-	prefs.set_value("settings","weapon",weapon)
+	prefs.set_value("settings","weapon",secondary)
+	prefs.set_value("settings","primary",primary)
 	prefs.save("user://records.cfg")
 
 func toggle_sound():
@@ -177,14 +188,49 @@ func close_match():
 func capacity() -> int:
 	return Gear.CAPACITY[weapon]
 
-func cycle_weapon():
-	weapon=(weapon+1)%Gear.NAMES.size()
-	pulse.hide()
-	pulse.queue_free()
-	pulse=Gear.make(weapon,depot,eye)
+func equip(id: int):
+	if pulse: pulse.hide()
+	weapon=id
+	if not models.has(id): models[id]=Gear.make(id,depot,eye)
+	pulse=models[id]
+	pulse.show()
+
+func select_slot(main: bool):
+	var selected:=primary if main else secondary
+	if hud.page!="armory" or weapon==selected:
+		if main: primary=3+(primary-3+1)%4
+		else: secondary=(secondary+1)%3
+	equip(primary if main else secondary)
 	save_prefs()
 	if hud.page=="armory": armory()
 	else: hud.show_page("arena_setup")
+
+func swap():
+	if mode!="play" or (battle and battle.health[0]<=0): return
+	var old_count:=charges
+	var old_charge:=recharge
+	var old_delay:=shot_delay
+	equip(secondary if weapon==primary else primary)
+	charges=spare_charges
+	recharge=spare_recharge
+	shot_delay=maxf(0.16,spare_delay)
+	spare_charges=old_count
+	spare_recharge=old_charge
+	spare_delay=old_delay
+	zoom=false
+	kick=0
+	pulse.scale=Vector3.ONE*0.84
+	pulse.get_node("Gloves").show()
+	pose()
+	hud.update_play()
+
+func refill():
+	charges=capacity()
+	spare_charges=Gear.CAPACITY[secondary if weapon==primary else primary]
+	recharge=0
+	spare_recharge=0
+	spare_delay=0
+	shot_delay=0
 
 func start_match():
 	close_match()
@@ -212,8 +258,8 @@ func armory():
 	hud.show_page("armory")
 	pulse.show()
 	pulse.get_node("Gloves").hide()
-	pulse.scale = Vector3.ONE * 1.70
-	pulse.position = Vector3(0.36,-0.055,-0.97)
+	pulse.scale = Vector3.ONE * (1.24 if weapon>=3 else 1.50)
+	pulse.position = Vector3(0.41,-0.04,-1.08)
 	pulse.rotation_degrees = Vector3(5,119,-3)
 
 func start_duel():
@@ -245,8 +291,8 @@ func start_round(is_duel: bool):
 	clear_plate()
 	place(polar.to_global(Polar.YARD_SPAWN) if versus else POS,0)
 	remaining = 90.0 if versus else DURATION
-	charges = capacity()
-	shot_delay = 0
+	equip(secondary if not battle and not versus else primary)
+	refill()
 	shots = 0
 	hits = 0
 	recharge = 0
@@ -316,6 +362,7 @@ func _input(event):
 		if mode=="play":
 			match event.keycode:
 				KEY_SPACE, KEY_F: fire()
+				KEY_TAB: swap()
 				KEY_C: set_crouch()
 				KEY_J: jump_requested=true
 				KEY_Q: zoom=not zoom
@@ -360,6 +407,7 @@ func _input(event):
 
 func press_action(pos: Vector2) -> bool:
 	match hud.overlay.action_at(pos):
+		"SWAP": swap()
 		"AIM": zoom=not zoom
 		"LOW": set_crouch()
 		"JUMP": jump_requested=true
@@ -431,13 +479,18 @@ func _physics_process(dt):
 					break
 			hud.update_play()
 			return
-	if weapon==1 and (fire_id>=0 or mouse_fire or Input.is_physical_key_pressed(KEY_F)): fire()
+	spare_delay=maxf(0,spare_delay-dt)
+	if spare_recharge>0:
+		spare_recharge=maxf(0,spare_recharge-dt)
+		if spare_recharge==0: spare_charges=Gear.CAPACITY[secondary if weapon==primary else primary]
+	if Gear.AUTO[weapon] and (fire_id>=0 or mouse_fire or Input.is_physical_key_pressed(KEY_F)): fire()
 	if mode!="play": return
 	var move := stick
 	move.x += int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
 	move.y += int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W))
 	move = move.limit_length(1)
 	var speed:=2.15 if crouched else 3.8
+	if weapon==4: speed*=0.86
 	var planar := player.basis*Vector3(move.x,0,move.y)*speed
 	player.velocity.x = planar.x
 	player.velocity.z = planar.z
@@ -448,7 +501,7 @@ func _physics_process(dt):
 	jump_requested=false
 	player.move_and_slide()
 	eye.position.y=move_toward(eye.position.y,0.89 if crouched else 1.50,4.8*dt)
-	eye.fov=move_toward(eye.fov,41.0 if zoom else 63.0,140.0*dt)
+	eye.fov=move_toward(eye.fov,(26.0 if weapon==6 else 41.0) if zoom else 63.0,140.0*dt)
 	if versus:
 		rival.advance(dt,player,eye)
 		if rival.bot_score>=Duel.LIMIT:
@@ -478,5 +531,5 @@ func finish_round():
 	hud.show_page("result")
 
 func outcome() -> String:
-	if hits==rival.bot_score: return "DRAW"
-	return "YOU WIN" if hits>rival.bot_score else "DRONE WINS"
+	if hits==rival.bot_score: return "무승부"
+	return "승리" if hits>rival.bot_score else "드론 승리"
