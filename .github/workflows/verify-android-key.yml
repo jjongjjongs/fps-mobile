@@ -1,0 +1,28 @@
+name: Verify Android release signing
+on:
+  push:
+    branches: [release/verify-signing-0.2.0]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Retrieve the verified 0.2.0 build inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download 45278574608 -n VectorRange-unsigned-arm64 -D build/unsigned
+          (cd build/unsigned && sha256sum -c SHA256SUMS.txt)
+          gh run download 45279183470 -n offline-tools -D materials
+          mkdir -p build/baseline
+          cp materials/fixture.apk build/baseline/previous.apk
+      - name: Sign with the updated repository secret and check the production certificate
+        env:
+          ANDROID_SIGNING: ${{ secrets.ANDROID_SIGNING }}
+        run: bash ci/sign.sh
