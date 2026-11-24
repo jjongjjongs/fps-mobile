@@ -78,7 +78,8 @@ while time.monotonic() < deadline:
                 resource = attrs.get("resource-id", "").split("/")[-1]
                 if text: actions.append((resource, text))
                 tutorial = attrs.get("package")=="android" and resource=="ok" and text=="got it"
-                positive = tutorial or text in {"update", "install", "업데이트", "설치"}
+                launcher_dialog = "pixel launcher isn't responding" in xml.lower() and resource=="aerr_close"
+                positive = launcher_dialog or tutorial or text in {"update", "install", "업데이트", "설치"}
                 if (positive or resource in {"button1", "ok_button", "install_button"}) and attrs.get("enabled")=="true":
                     x1,y1,x2,y2=map(int,re.findall(r"\d+",attrs["bounds"]))
                     adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
