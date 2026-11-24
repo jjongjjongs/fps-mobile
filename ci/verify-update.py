@@ -35,6 +35,7 @@ threading.Thread(target=server.serve_forever,daemon=True).start()
 adb("reverse","tcp:8174","tcp:8174")
 adb("shell","wm","size","720x1280")
 adb("shell","wm","dismiss-keyguard")
+adb("shell","settings","put","secure","immersive_mode_confirmations","confirmed")
 adb("shell","svc","power","stayon","true")
 adb("install", "-r", "probe/previous.apk")
 adb("shell", "appops", "set", PACKAGE, "REQUEST_INSTALL_PACKAGES", "allow")
@@ -63,7 +64,8 @@ while time.monotonic() < deadline:
                 text = attrs.get("text", "").strip().lower()
                 resource = attrs.get("resource-id", "").split("/")[-1]
                 if text: actions.append((resource, text))
-                positive = text in {"update", "install", "업데이트", "설치"}
+                tutorial = attrs.get("package")=="android" and resource=="ok" and text=="got it"
+                positive = tutorial or text in {"update", "install", "업데이트", "설치"}
                 if (positive or resource in {"button1", "ok_button", "install_button"}) and attrs.get("enabled")=="true":
                     x1,y1,x2,y2=map(int,re.findall(r"\d+",attrs["bounds"]))
                     adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
