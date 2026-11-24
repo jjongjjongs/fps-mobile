@@ -50,12 +50,6 @@ jobs:
           if [[ -z "$ANDROID_SIGNING" ]]; then echo "::error::Set the ANDROID_SIGNING repository secret"; exit 1; fi
           bash ci/sign.sh
           echo 'signed=true' >> "$GITHUB_OUTPUT"
-      - name: Upload lower-version upgrade fixture
-        if: steps.signing.outputs.signed == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: upgrade-fixture
-          path: build/baseline/previous-signed.apk
       - name: Upload signed release
         if: steps.signing.outputs.signed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -80,7 +74,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           variant=release
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name upgrade-fixture --dir fixture
+          gh release download v0.2.0 --repo "$GITHUB_REPOSITORY" --pattern VectorRange-0.2.0-release-arm64.apk --dir previous
+          echo "418c643726a7cddcc011e33a33485a96e3ac0160426115aa92f72af4be8fc7d9  previous/VectorRange-0.2.0-release-arm64.apk" | sha256sum -c -
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "VectorRange-$variant-arm64" --dir apk
           cd apk
           sha256sum -c SHA256SUMS.txt
@@ -105,8 +100,12 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            adb install fixture/previous-signed.apk
+            adb install previous/VectorRange-0.2.0-release-arm64.apk
+            adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F 'versionName=0.2.0'
+            adb shell am start -W "$(adb shell cmd package resolve-activity --brief com.jjongjjongs.vectorrange | tail -1 | tr -d '\r')"
+            adb shell am force-stop com.jjongjjongs.vectorrange
             adb install -r apk/install.apk
+            adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F "versionName=${{ needs.android.outputs.game_version }}"
             adb shell am start -W "$(adb shell cmd package resolve-activity --brief "$(cat apk/package-name)" | tail -1 | tr -d '\r')"
             sleep 5
             adb shell pidof "$(cat apk/package-name)"
@@ -140,7 +139,7 @@ jobs:
           (cd apk && sha256sum -c SHA256SUMS.txt)
           mv apk/*.apk "$filename"
           printf '%s\n' "안드로이드 ARM64 설치판입니다. 아래 Assets에서 **$filename**을 눌러 설치하세요." > notes.md
-          printf '\n![실제 플레이 화면](https://raw.githubusercontent.com/%s/%s/docs/images/polar.jpg)\n' "$GITHUB_REPOSITORY" "$REVISION" >> notes.md
-          echo "PLAY → POLAR AI DUEL → START DUEL. 드론과 90초 동안 먼저 5점을 내면 승리합니다. 0.1.x Preview와 함께 설치되며, 이후 정식판은 같은 앱으로 업데이트됩니다." >> notes.md
+          printf '\n![실제 플레이 화면](https://raw.githubusercontent.com/%s/%s/docs/images/arena.jpg)\n' "$GITHUB_REPOSITORY" "$REVISION" >> notes.md
+          echo "PLAY → ARENA MATCH에서 모드와 맵을 선택하세요. 5개 모드, 신규 맵 Tide Dock과 Saffron Court, 신규 장비 Flux와 Prism이 추가되었습니다. 0.2.0 정식판 위에 업데이트할 수 있습니다." >> notes.md
           gh release create "$tag" "$filename" --repo "$GITHUB_REPOSITORY" --target "$REVISION" --title "Vector Range $VERSION · Android $variant" --notes-file notes.md
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].url' >> "$GITHUB_STEP_SUMMARY"
