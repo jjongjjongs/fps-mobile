@@ -118,9 +118,6 @@ jobs:
             adb shell am force-stop com.jjongjjongs.vectorrange
             python3 fixture/ci/verify-update.py "${{ needs.android.outputs.game_version }}"
             adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F "versionName=${{ needs.android.outputs.game_version }}"
-            adb shell am start -W "$(adb shell cmd package resolve-activity --brief "$(cat apk/package-name)" | tail -1 | tr -d '\r')"
-            sleep 5
-            adb shell pidof "$(cat apk/package-name)"
 
   publish:
     needs: [android, install-test]

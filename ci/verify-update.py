@@ -46,7 +46,20 @@ deadline = time.monotonic() + 280
 while time.monotonic() < deadline:
     if f"versionName={version}" in adb("shell", "dumpsys", "package", PACKAGE):
         print("In-app download, integrity check and Android-confirmed package replacement passed.")
-        sys.exit(0)
+        # PackageManager reports the new version before the old Godot task has
+        # finished tearing down. Return to the launcher and test a cold launch.
+        time.sleep(5)
+        adb("shell","input","keyevent","KEYCODE_HOME")
+        for attempt in range(3):
+            adb("shell","am","force-stop",PACKAGE)
+            time.sleep(2)
+            print(adb("shell","am","start","-W","-f","0x10008000",activity),flush=True)
+            time.sleep(7)
+            if adb("shell","pidof",PACKAGE,check=False).strip():
+                print("Updated game cold launch passed.",flush=True)
+                sys.exit(0)
+        print(adb("logcat","-d","-b","crash")[-3500:])
+        sys.exit("The updated game did not stay running after a cold launch.")
     logs = adb("logcat", "-d", "-s", "godot")
     if "UPGRADE_PROBE failed" in logs:
         sys.exit(logs[-3500:])
