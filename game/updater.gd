@@ -19,6 +19,9 @@ var transfer := HTTPRequest.new()
 func _ready():
 	add_child(metadata)
 	add_child(transfer)
+	metadata.use_threads=true
+	transfer.use_threads=true
+	transfer.download_chunk_size=262144
 	metadata.timeout=18
 	metadata.body_size_limit=1024*1024
 	transfer.timeout=240

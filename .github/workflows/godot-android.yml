@@ -83,6 +83,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           variant=release
+          gh release download v0.3.0 --repo "$GITHUB_REPOSITORY" --pattern VectorRange-0.3.0-release-arm64.apk --dir previous
+          echo "0fd71dc94bb859668f8cf226ad49bdd54b33ab4092c6909ea01c100809a4a198  previous/VectorRange-0.3.0-release-arm64.apk" | sha256sum -c -
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name upgrade-fixture --dir fixture
           mkdir -p probe
           mv fixture/build/probe/previous.apk probe/
@@ -110,11 +112,11 @@ jobs:
           emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            python3 fixture/ci/verify-update.py
+            adb install previous/VectorRange-0.3.0-release-arm64.apk
             adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F 'versionName=0.3.0'
             adb shell am start -W "$(adb shell cmd package resolve-activity --brief com.jjongjjongs.vectorrange | tail -1 | tr -d '\r')"
             adb shell am force-stop com.jjongjjongs.vectorrange
-            adb install -r apk/install.apk
+            python3 fixture/ci/verify-update.py "${{ needs.android.outputs.game_version }}"
             adb shell dumpsys package com.jjongjjongs.vectorrange | grep -F "versionName=${{ needs.android.outputs.game_version }}"
             adb shell am start -W "$(adb shell cmd package resolve-activity --brief "$(cat apk/package-name)" | tail -1 | tr -d '\r')"
             sleep 5

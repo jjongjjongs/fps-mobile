@@ -72,11 +72,11 @@ verify_package build/unsigned/VectorRange-unsigned.apk com.jjongjjongs.vectorran
 (cd build/unsigned && sha256sum *.apk > SHA256SUMS.txt)
 
 # Build a disposable lower-version app to exercise the first in-app upgrade against
-# the published 0.3.0. The release above contains no test driver.
+# the signed production APK via an emulator-only mirror.
 mkdir -p build/probe
-sed -i 's|^version/code=.*|version/code=2999|;s|^version/name=.*|version/name="0.2.999"|' export_presets.cfg
-sed -i 's|^config/version=.*|config/version="0.2.999"|' project.godot
-sed -i 's|/releases/latest"|/releases/tags/v0.3.0"|' game/updater.gd
+sed -i 's|^version/code=.*|version/code=3999|;s|^version/name=.*|version/name="0.3.999"|' export_presets.cfg
+sed -i 's|^config/version=.*|config/version="0.3.999"|' project.godot
+sed -i 's|https://api.github.com/repos/jjongjjongs/fps-mobile/releases/latest|http://127.0.0.1:8174/metadata|;s|https://github.com/jjongjjongs/fps-mobile/releases/download/|http://127.0.0.1:8174/|' game/updater.gd
 python3 - <<'PYPROBE'
 from pathlib import Path
 p=Path("game/range.gd")
