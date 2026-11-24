@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [godot/depot-mobile]
-    paths: [release-version.txt]
+    paths: [release-version.txt, ci/verify-update.py]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
@@ -107,7 +107,7 @@ jobs:
           arch: x86_64
           target: google_apis
           profile: pixel_6
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swangle_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             python3 fixture/ci/verify-update.py
