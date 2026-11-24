@@ -34,6 +34,4 @@ if grep -Eiq 'certificate DN:.*CN=(Android Debug|Vector Range Preview)([, ]|$)' 
   exit 1
 fi
 test "$actual" = "767c05ea60ee5dcd423465eef7dd6ff0d4fadc18b1d3626a2964bdaef912db5f"
-"$tool" sign --ks "$keydir/key" --ks-key-alias "$alias_name" --ks-pass "file:$keydir/store" \
-  --key-pass "file:$keydir/pass" --out build/baseline/previous-signed.apk build/baseline/previous.apk
 (cd build/release && sha256sum *.apk > SHA256SUMS.txt)

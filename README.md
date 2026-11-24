@@ -2,7 +2,23 @@
 
 안드로이드 ARM64용 1인칭 펄스 태그 게임입니다. [GitHub Releases](https://github.com/jjongjjongs/fps-mobile/releases/latest)에서 **Assets → VectorRange-버전-release-arm64.apk**를 눌러 설치하세요.
 
-## 게임 모드
+## 아레나 매치
+
+**PLAY → ARENA MATCH → 모드 선택** 후 MAP과 GEAR를 눌러 전장과 무기를 바꾸고 START MATCH를 누르세요. 한 명의 플레이어와 세 AI가 참가합니다.
+
+| 모드 | 승리 조건 |
+| --- | --- |
+| DEATHMATCH | 무제한 부활, 개인 8점 선취 |
+| TEAM DEATHMATCH | 2대2, 팀 합계 12점 선취 |
+| DEMOLITION | 파란 팀이 A에서 3초간 코어 설치 후 18초 방어. 주황 팀은 4초간 해제 |
+| CONTROL | 거점에 한 팀만 있으면 초당 1점, 30점 선취 |
+| LAST STANDING | 각자 한 생명, 최후의 생존자가 승리. 시간 종료 시 남은 장갑 비교 |
+
+**Tide Dock**은 컨테이너 사이를 돌아 들어가는 화물 부두이고, **Saffron Court**는 사암 회랑과 옆길이 만나는 중정입니다. PULSE는 균형형, FLUX는 발사 버튼을 누르고 있으면 연속 발사하는 근거리 무기, PRISM은 강한 한 발을 쏘는 정밀 무기입니다.
+
+![실제 아레나 화면](docs/images/arena.jpg)
+
+## 기존 게임 모드
 
 - **PLAY → POLAR AI DUEL → START DUEL**로 북극 연구기지에 들어갑니다. 90초 안에 먼저 5점을 내면 승리합니다. 시간이 끝나면 점수가 높은 쪽이 이기며 동점이면 무승부입니다. 드론이 발광하면 펄스가 날아옵니다.
 - **PLAY → START RUN**으로 창고 사격장에서 30초 동안 표적 기록에 도전합니다.
@@ -24,4 +40,4 @@ godot --headless --editor --import
 godot --headless --fixed-fps 60 --script tests/smoke.gd
 ```
 
-버전을 올려 푸시하면 GitHub Actions가 맵과 입력 테스트를 거쳐 APK를 생성합니다. 배포용 비밀 값 `ANDROID_SIGNING`은 키스토어 Base64와 별칭, 비밀번호가 든 JSON입니다. 서명 인증서 지문을 확인한 뒤 Android 15에서 낮은 버전의 시험 패키지 위에 APK를 업데이트하고 앱을 실행합니다. 통과한 APK를 GitHub Releases에 게시합니다.
+버전을 올려 푸시하면 GitHub Actions가 맵과 입력 테스트를 거쳐 APK를 생성합니다. 배포용 비밀 값 `ANDROID_SIGNING`은 키스토어 Base64와 별칭, 비밀번호가 든 JSON입니다. 서명 인증서 지문을 확인한 뒤 Android 15에서 공개된 0.2.0 정식판 위에 APK를 업데이트하고 앱을 실행합니다. 통과한 APK를 GitHub Releases에 게시합니다.

@@ -1,5 +1,16 @@
 extends Node3D
 
+const Match = preload("res://game/arena_match.gd")
+const Arena = preload("res://game/arena.gd")
+const Gear = preload("res://game/loadout.gd")
+var battle: Match
+var chosen_rule := 0
+var chosen_map := 0
+var weapon := 0
+var shot_delay := 0.0
+var aim_end := Vector3.ZERO
+var mouse_fire := false
+
 const Depot = preload("res://game/depot.gd")
 const Hud = preload("res://game/hud.gd")
 const Polar = preload("res://game/polar.gd")
@@ -63,11 +74,13 @@ func _ready():
 	eye.near = 0.04
 	eye.far = 65
 	eye.fov = 63
-	pulse = depot.make_pulse(eye)
+	
 	add_child(speaker)
 	tones.append(tone(220,145))
 	tones.append(tone(700,1030))
 	prefs.load("user://records.cfg")
+	weapon=clampi(prefs.get_value("settings","weapon",0),0,Gear.NAMES.size()-1)
+	pulse=Gear.make(weapon,depot,eye)
 	best = prefs.get_value("records","score",0)
 	best_accuracy = prefs.get_value("records","accuracy",0)
 	sound = prefs.get_value("settings","sound",true)
@@ -96,6 +109,7 @@ func save_prefs():
 	prefs.set_value("records","accuracy",best_accuracy)
 	prefs.set_value("settings","sound",sound)
 	prefs.set_value("settings","look",sensitivity)
+	prefs.set_value("settings","weapon",weapon)
 	prefs.save("user://records.cfg")
 
 func toggle_sound():
@@ -114,6 +128,7 @@ func clear_input():
 	look_id = -1
 	fire_id = -1
 	mouse_look = false
+	mouse_fire = false
 
 func clear_plate():
 	if lit>=0:
@@ -151,7 +166,39 @@ func place(at: Vector3, yaw: float):
 	player.velocity = Vector3.ZERO
 	clear_input()
 
+func close_match():
+	if battle:
+		remove_child(battle)
+		battle.queue_free()
+		battle=null
+	player.collision_layer=1
+	player.collision_mask=1
+
+func capacity() -> int:
+	return Gear.CAPACITY[weapon]
+
+func cycle_weapon():
+	weapon=(weapon+1)%Gear.NAMES.size()
+	pulse.hide()
+	pulse.queue_free()
+	pulse=Gear.make(weapon,depot,eye)
+	save_prefs()
+	if hud.page=="armory": armory()
+	else: hud.show_page("arena_setup")
+
+func start_match():
+	close_match()
+	battle=Match.new()
+	add_child(battle)
+	battle.position=Vector3(500,0,0)
+	battle.build(self,chosen_rule,chosen_map)
+	start_round(false)
+	battle.spawn_player()
+	remaining=120 if chosen_rule!=Match.Rule.SURVIVAL else 90
+	hud.update_play()
+
 func home():
+	close_match()
 	versus=false
 	if polar: polar.hide()
 	mode = "home"
@@ -170,6 +217,7 @@ func armory():
 	pulse.rotation_degrees = Vector3(5,119,-3)
 
 func start_duel():
+	close_match()
 	if not polar:
 		polar=Polar.new()
 		add_child(polar)
@@ -183,10 +231,12 @@ func start_duel():
 	start_round(true)
 
 func start_run():
+	close_match()
 	start_round(false)
 
 func retry():
-	if versus: start_duel()
+	if battle: start_match()
+	elif versus: start_duel()
 	else: start_run()
 
 func start_round(is_duel: bool):
@@ -195,7 +245,8 @@ func start_round(is_duel: bool):
 	clear_plate()
 	place(polar.to_global(Polar.YARD_SPAWN) if versus else POS,0)
 	remaining = 90.0 if versus else DURATION
-	charges = CAPACITY
+	charges = capacity()
+	shot_delay = 0
 	shots = 0
 	hits = 0
 	recharge = 0
@@ -296,10 +347,13 @@ func _input(event):
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.device!=InputEvent.DEVICE_ID_EMULATION and event.button_index==MOUSE_BUTTON_LEFT:
 		mouse_look = false
+		mouse_fire=false
 		if event.pressed:
 			if hud.overlay.pause_rect().has_point(event.position): pause_run()
 			elif press_action(event.position): pass
-			elif event.position.distance_to(hud.overlay.fire_center())<=57: fire()
+			elif event.position.distance_to(hud.overlay.fire_center())<=57:
+				mouse_fire=true
+				fire()
 			else: mouse_look=true
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion and mouse_look: look(event.relative)
@@ -314,23 +368,31 @@ func press_action(pos: Vector2) -> bool:
 
 func aim_index() -> int:
 	var from := eye.global_position
-	var query := PhysicsRayQueryParameters3D.create(from,from-eye.global_basis.z*55)
+	var query := PhysicsRayQueryParameters3D.create(from,from-eye.global_basis.z*float(Gear.REACH[weapon]))
 	query.exclude = [player.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if battle:
+		aim_end=hit.get("position",query.to)
+		var slot:int=hit.collider.get_meta("arena_slot",-1) if hit else -1
+		return slot if battle.can_hit(slot) else -1
 	if versus: return 0 if hit.get("collider")==rival.bot and rival.grace<=0 else -1
 	return hit.collider.get_meta("plate",-1) if hit else -1
 
 func fire():
-	if mode!="play" or charges<=0: return
+	if mode!="play" or charges<=0 or shot_delay>0 or (battle and battle.health[0]<=0): return
+	if battle or weapon!=0: shot_delay=Gear.INTERVAL[weapon]
 	var plate := aim_index()
+	if battle: battle.draw_beam(0,eye.to_global(Vector3(0.17,-0.09,-0.5)),aim_end)
 	shots += 1
 	charges -= 1
 	kick = 1
-	if charges==0: recharge = RECHARGE_TIME
+	if charges==0: recharge = Gear.RECHARGE[weapon]
 	if plate>=0:
 		hits += 1
 		clear_plate()
-		if versus:
+		if battle:
+			battle.damage(0,plate,Gear.DAMAGE[weapon])
+		elif versus:
 			rival.tagged()
 		else:
 			lit = plate
@@ -340,10 +402,10 @@ func fire():
 		speaker.stream = tones[int(plate>=0)]
 		speaker.play()
 	hud.update_play()
-	if versus and hits>=Duel.LIMIT: finish_round()
+	if (battle and battle.result!="") or (versus and hits>=Duel.LIMIT): finish_round()
 
 func pose():
-	var dip := sin(PI*recharge/RECHARGE_TIME)
+	var dip := sin(PI*recharge/float(Gear.RECHARGE[weapon]))
 	pulse.position = Vector3(0.225,-0.14-dip*0.14+sin(step_phase)*0.004,-0.52+kick*0.035)
 	var blend:=clampf((63.0-eye.fov)/22.0,0,1)
 	pulse.position=pulse.position.lerp(Vector3(0,-0.098-dip*0.12,-0.53+kick*0.018),blend)
@@ -356,6 +418,21 @@ func _physics_process(dt):
 		remaining=0
 		finish_round()
 		return
+	shot_delay=maxf(0,shot_delay-dt)
+	if battle:
+		battle.advance(dt)
+		if battle.result!="":
+			finish_round()
+			return
+		if battle.health[0]==0:
+			for i in range(1,4):
+				if battle.health[i]>0:
+					eye.look_at(battle.chest(i))
+					break
+			hud.update_play()
+			return
+	if weapon==1 and (fire_id>=0 or mouse_fire or Input.is_physical_key_pressed(KEY_F)): fire()
+	if mode!="play": return
 	var move := stick
 	move.x += int(Input.is_physical_key_pressed(KEY_D))-int(Input.is_physical_key_pressed(KEY_A))
 	move.y += int(Input.is_physical_key_pressed(KEY_S))-int(Input.is_physical_key_pressed(KEY_W))
@@ -379,7 +456,7 @@ func _physics_process(dt):
 			return
 	if recharge>0:
 		recharge = maxf(0,recharge-dt)
-		if recharge==0: charges=CAPACITY
+		if recharge==0: charges=capacity()
 	if hit_flash>0:
 		hit_flash = maxf(0,hit_flash-dt)
 		if hit_flash==0: clear_plate()
@@ -392,7 +469,9 @@ func _physics_process(dt):
 func finish_round():
 	mode="result"
 	clear_input()
-	if not versus:
+	if battle:
+		battle.finish_time()
+	elif not versus:
 		best=maxi(best,hits*100)
 		best_accuracy=maxi(best_accuracy,accuracy())
 		save_prefs()

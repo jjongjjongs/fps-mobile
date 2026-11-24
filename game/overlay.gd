@@ -11,6 +11,13 @@ var flash := false
 var aimed := false
 var score := 0
 var seconds := 30
+var arena_status := ""
+var beacon := ""
+var arena_score := ""
+var health_flash := false
+var tool_name := "PULSE"
+var capacity := 5
+var charge_time := 1.05
 var insets := Vector4.ZERO
 
 var duel := false
@@ -45,7 +52,15 @@ func _draw():
 	draw_rect(Rect2(cx-118,13+t,236,42),INK)
 	draw_rect(Rect2(cx-118,13+t,4,42),AMBER)
 	caption("%02d:%02d" % [floori(seconds/60.0),seconds%60],Vector2(cx-108,42+t),96,23,CREAM)
-	caption(("%d : %d" % [score,opponent]) if duel else "%04d" % score,Vector2(cx+4,42+t),100,23,AMBER)
+	if arena_score!="":
+		caption(arena_score,Vector2(cx-9,40+t),124,12,AMBER)
+		draw_rect(Rect2(cx-150,57+t,300,27),INK)
+		caption(arena_status,Vector2(cx-148,76+t),296,14,MINT)
+		if beacon!="":
+			draw_rect(Rect2(insets.x+16,t+18,161,33),INK)
+			caption(beacon,Vector2(insets.x+16,t+40),161,14,CREAM)
+		if health_flash: draw_rect(Rect2(Vector2.ZERO,size),Color("#ed8055"),false,6)
+	else: caption(("%d : %d" % [score,opponent]) if duel else "%04d" % score,Vector2(cx+4,42+t),100,23,AMBER)
 	var pr := pause_rect()
 	draw_rect(pr,INK)
 	draw_rect(Rect2(pr.get_center()-Vector2(8,8),Vector2(5,16)),CREAM)
@@ -58,9 +73,9 @@ func _draw():
 	draw_circle(f,48,INK,true,-1,true)
 	draw_arc(f,48,-PI/2,TAU-PI/2,60,CREAM,2,true)
 	if recharge>0:
-		draw_arc(f,48,-PI/2,-PI/2+TAU*clampf(1-recharge/1.05,0.001,1),48,MINT,5,true)
-	caption("PULSE",f+Vector2(-45,6),90,18,AMBER)
-	caption("CHARGING" if recharge>0 else "%d  /  5" % charges,f+Vector2(-58,-61),116,15,CREAM)
+		draw_arc(f,48,-PI/2,-PI/2+TAU*clampf(1-recharge/charge_time,0.001,1),48,MINT,5,true)
+	caption(tool_name,f+Vector2(-45,6),90,18,AMBER)
+	caption("CHARGING" if recharge>0 else "%d  /  %d" % [charges,capacity],f+Vector2(-58,-61),116,15,CREAM)
 	for action in ACTIONS:
 		var point:=action_center(action)
 		var active: bool=(action=="AIM" and zoom) or (action=="LOW" and low)
@@ -75,4 +90,4 @@ func _draw():
 	for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 		draw_line(c+d*6,c+d*10,color,1.4,true)
 	if flash:
-		caption("+1" if duel else "+100",c+Vector2(9,-13),77,21,AMBER)
+		caption("HIT" if arena_score!="" else ("+1" if duel else "+100"),c+Vector2(9,-13),77,21,AMBER)

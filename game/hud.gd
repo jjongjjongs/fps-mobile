@@ -1,5 +1,8 @@
 extends CanvasLayer
 
+const Match = preload("res://game/arena_match.gd")
+const Arena = preload("res://game/arena.gd")
+const Gear = preload("res://game/loadout.gd")
 const Overlay = preload("res://game/overlay.gd")
 const INK := Color("#11242bf2")
 const MINT := Color("#75e6c8")
@@ -110,12 +113,26 @@ func show_page(next: String):
 			button("SETTINGS",func(): show_page("settings"))
 		"setup":
 			label("PLAY     /     SELECT MODE",15,MINT)
-			button("POLAR AI DUEL",func(): show_page("duel_setup"),true)
+			button("ARENA MATCH",func(): show_page("arena_modes"),true)
+			button("POLAR AI DUEL",func(): show_page("duel_setup"))
 			label("TIME ATTACK",38,CREAM)
 			label("30 SEC     /     +100 PER HIT",18,AMBER)
-			label("Equipment    /    PULSE",18,CREAM)
+			label("Equipment    /    "+Gear.NAMES[game.weapon],18,CREAM)
 			button("START RUN",game.start_run)
 			button("BACK",game.home)
+		"arena_modes":
+			label("ARENA     /     SELECT MODE",15,MINT)
+			for i in Match.NAMES.size():
+				button(Match.NAMES[i],select_rule.bind(i))
+			button("BACK",func(): show_page("setup"))
+		"arena_setup":
+			label("OFFLINE ARENA     /     4 PLAYERS",15,MINT)
+			label(Match.NAMES[game.chosen_rule],29,CREAM)
+			label(Match.BRIEFS[game.chosen_rule].replace(". ", ".\n"),16,CREAM)
+			button("MAP   "+Arena.NAMES[game.chosen_map],cycle_map)
+			button("GEAR   "+Gear.NAMES[game.weapon],game.cycle_weapon)
+			button("START MATCH",game.start_match,true)
+			button("BACK",func(): show_page("arena_modes"))
 		"duel_setup":
 			label("POLAR STATION     /     1 VS 1",15,MINT)
 			label("DRONE DUEL",38,CREAM)
@@ -125,8 +142,10 @@ func show_page(next: String):
 			button("BACK",func(): show_page("setup"))
 		"armory":
 			label("ARMORY     /     EQUIPPED",15,MINT)
-			label("PULSE",40,CREAM)
-			label("5 charges    /    Auto recharge",17,CREAM)
+			label(Gear.NAMES[game.weapon],40,CREAM)
+			label(Gear.INFO[game.weapon],17,MINT)
+			label("%d charges    /    Auto recharge"%game.capacity(),17,CREAM)
+			button("CHANGE WEAPON",game.cycle_weapon,true)
 			button("BACK",game.home)
 		"records":
 			label("DEPOT     /     RECORDS",15,MINT)
@@ -141,15 +160,15 @@ func show_page(next: String):
 			button("LOOK     "+["LOW","NORMAL","HIGH"][game.sensitivity],game.change_sensitivity)
 			button("BACK",game.back)
 		"pause":
-			label("POLAR     /     DRONE DUEL" if game.versus else "DEPOT     /     TIME ATTACK",15,MINT)
+			label(round_title(),15,MINT)
 			label("PAUSED",40,CREAM)
 			button("RESUME",game.resume_run,true)
 			button("SETTINGS",func(): show_page("settings"))
 			button("HOME",game.home)
 		"result":
-			label("POLAR     /     DRONE DUEL" if game.versus else "DEPOT     /     TIME ATTACK",15,MINT)
-			label(game.outcome() if game.versus else "RUN COMPLETE",36,CREAM)
-			label(("You  %d     Drone  %d" % [game.hits,game.rival.bot_score]) if game.versus else "Score      %d" % (game.hits*100),24,AMBER)
+			label(round_title(),15,MINT)
+			label(game.battle.result if game.battle else (game.outcome() if game.versus else "RUN COMPLETE"),36,CREAM)
+			label(game.battle.scoreboard() if game.battle else ("You  %d     Drone  %d" % [game.hits,game.rival.bot_score]) if game.versus else "Score      %d" % (game.hits*100),24,AMBER)
 			label("Hits   %d / %d     ·     %d%%" % [game.hits,game.shots,game.accuracy()],18,CREAM)
 			button("RETRY",game.retry,true)
 			button("HOME",game.home)
@@ -157,7 +176,32 @@ func show_page(next: String):
 	refresh_safe_area()
 	card.resized.connect(refresh_safe_area)
 
+func select_rule(value: int):
+	game.chosen_rule=value
+	show_page("arena_setup")
+
+func cycle_map():
+	game.chosen_map=(game.chosen_map+1)%Arena.NAMES.size()
+	show_page("arena_setup")
+
+func round_title() -> String:
+	if game.battle: return Arena.NAMES[game.chosen_map]+"  /  "+Match.NAMES[game.chosen_rule]
+	return "POLAR  /  DRONE DUEL" if game.versus else "DEPOT  /  TIME ATTACK"
+
 func update_play():
+	overlay.arena_status=game.battle.status() if game.battle else ""
+	overlay.beacon=""
+	if game.battle and game.battle.arena.marker and game.battle.health[0]>0:
+		var target:Vector3=game.battle.arena.marker.global_position
+		var local:Vector3=game.player.to_local(target)
+		var angle:=rad_to_deg(atan2(local.x,-local.z))
+		var arrow:="AHEAD" if absf(angle)<25 else ("BEHIND" if absf(angle)>145 else ("RIGHT" if angle>0 else "LEFT"))
+		overlay.beacon="%s   %s   %dm"%[game.battle.arena.marker.text,arrow,roundi(Vector2(local.x,local.z).length())]
+	overlay.arena_score=game.battle.scoreboard() if game.battle else ""
+	overlay.health_flash=game.battle!=null and game.battle.player_flash>0
+	overlay.tool_name=Gear.NAMES[game.weapon]
+	overlay.capacity=game.capacity()
+	overlay.charge_time=Gear.RECHARGE[game.weapon]
 	overlay.stick = game.stick
 	overlay.duel = game.versus
 	overlay.score = game.hits if game.versus else game.hits*100

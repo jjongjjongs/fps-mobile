@@ -32,7 +32,7 @@ done
 godot="$work/$editor"
 chmod +x "$godot"
 install_dir="$HOME/.local/share/godot/export_templates/$version.stable"
-mkdir -p "$install_dir" "$HOME/.config/godot" build/unsigned build/baseline
+mkdir -p "$install_dir" "$HOME/.config/godot" build/unsigned
 unzip -p "$work/$templates" templates/android_release.apk > "$install_dir/android_release.apk"
 test -s "$install_dir/android_release.apk"
 cat > "$HOME/.config/godot/editor_settings-4.7.tres" <<SETTINGS
@@ -45,6 +45,7 @@ SETTINGS
 
 "$godot" --headless --editor --import
 XDG_DATA_HOME="$work/smoke-user" "$godot" --headless --fixed-fps 60 --script tests/smoke.gd
+XDG_DATA_HOME="$work/arena-user" "$godot" --headless --fixed-fps 60 --script tests/arena.gd
 tools_dir=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
 test -x "$tools_dir/zipalign"
 sed -i "s|^version/code=.*|version/code=$code|" export_presets.cfg
@@ -66,16 +67,4 @@ verify_package() {
 export_apk production
 cp "$work/production.apk" build/unsigned/VectorRange-unsigned.apk
 verify_package build/unsigned/VectorRange-unsigned.apk com.jjongjjongs.vectorrange
-# A tiny lower-version fixture lets the device exercise an actual package upgrade.
-mkdir "$work/fixture"
-cat > "$work/fixture/AndroidManifest.xml" <<MANIFEST
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.jjongjjongs.vectorrange" android:versionCode="$((code-1))">
-    <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
-    <application android:hasCode="false" android:label="Vector Range"/>
-</manifest>
-MANIFEST
-platform=$(find "$ANDROID_HOME/platforms" -name android.jar | sort -V | tail -1)
-"$tools_dir/aapt" package -f -M "$work/fixture/AndroidManifest.xml" -I "$platform" -F "$work/baseline.apk"
-"$tools_dir/zipalign" -f 4 "$work/baseline.apk" build/baseline/previous.apk
 (cd build/unsigned && sha256sum *.apk > SHA256SUMS.txt)
