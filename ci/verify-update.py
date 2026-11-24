@@ -24,17 +24,30 @@ while time.monotonic() < deadline:
     if "UPGRADE_PROBE failed" in logs:
         sys.exit(logs[-3500:])
     if "opening Android installer" in logs:
-        # Only confirm the positive action in the system package installer.
-        if "dumped" in adb("shell", "uiautomator", "dump", "/data/local/tmp/vr-ui.xml", check=False).lower():
-            xml = adb("shell", "cat", "/data/local/tmp/vr-ui.xml")
-            for node in ET.fromstring(xml).iter("node"):
+        activities = adb("shell", "dumpsys", "activity", "activities")
+        resumed = next((line for line in activities.splitlines() if "topResumedActivity" in line), "")
+        if "packageinstaller" in resumed.lower():
+            adb("shell", "uiautomator", "dump", "--compressed", "/sdcard/vr-install.xml", check=False)
+            xml = adb("shell", "cat", "/sdcard/vr-install.xml", check=False)
+            nodes = ET.fromstring(xml).iter("node") if xml.startswith("<?xml") else []
+            actions = []
+            for node in nodes:
                 attrs = node.attrib
-                if attrs["package"] not in {"com.android.packageinstaller", "com.google.android.packageinstaller", "com.android.permissioncontroller", "com.google.android.permissioncontroller"}:
-                    continue
-                if attrs["resource-id"].endswith("/button1") and attrs["enabled"]=="true":
+                if "packageinstaller" not in attrs.get("package", "").lower(): continue
+                text = attrs.get("text", "").strip().lower()
+                resource = attrs.get("resource-id", "").split("/")[-1]
+                if text: actions.append((resource, text))
+                positive = text in {"update", "install", "업데이트", "설치"}
+                if (positive or resource in {"button1", "ok_button", "install_button"}) and attrs.get("enabled")=="true":
                     x1,y1,x2,y2=map(int,re.findall(r"\d+",attrs["bounds"]))
                     adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
                     break
+            else:
+                # Some Android package installer versions expose only keyboard focus.
+                adb("shell","input","keyevent","KEYCODE_TAB")
+                adb("shell","input","keyevent","KEYCODE_DPAD_RIGHT")
+                adb("shell","input","keyevent","KEYCODE_ENTER")
+            print("Installer controls:", actions, flush=True)
     time.sleep(2)
 print(adb("logcat", "-d", "-s", "godot", "PackageInstaller")[-3500:])
 print(adb("shell","dumpsys","activity","activities")[:1800])
