@@ -1,0 +1,56 @@
+name: Verify Android preview installation
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Source Godot Android APK run ID
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  install:
+    if: github.event_name == 'workflow_dispatch' || (github.head_ref == 'verify/preview-install' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - name: Retrieve the original signed APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SRC: ${{ inputs.run_id || '45134404247' }}
+        run: |
+          set -euo pipefail
+          gh run download "$SRC" --repo "$GITHUB_REPOSITORY" --name VectorRange-preview-arm64 --dir package
+          cd package
+          sha256sum -c SHA256SUMS.txt
+          bin=$(dirname "$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)")
+          "$bin/apksigner" verify --verbose --print-certs VectorRange-preview.apk
+          "$bin/aapt" dump badging VectorRange-preview.apk > manifest.txt
+          grep -E '^(package:|sdkVersion|targetSdkVersion|native-code|uses-feature|launchable-activity|application-debuggable)' manifest.txt
+          grep -q "package: name='com.jjongjjongs.vectorrange.preview'" manifest.txt
+          "$bin/zipalign" -c -P 16 4 VectorRange-preview.apk
+      - name: Enable hosted emulator KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test Android 15 fresh install and launch
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb shell getprop ro.product.cpu.abilist
+            adb install package/VectorRange-preview.apk
+            adb shell pm path com.jjongjjongs.vectorrange.preview
+            adb shell am start -W "$(adb shell cmd package resolve-activity --brief com.jjongjjongs.vectorrange.preview | tail -1 | tr -d '\r')"
+            sleep 5
+            adb shell pidof com.jjongjjongs.vectorrange.preview
